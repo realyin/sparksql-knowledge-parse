@@ -7,12 +7,7 @@ import re
 import sqlglot
 from sqlglot import ErrorLevel
 from sqlglot import exp
-from sqlglot.optimizer.scope import Scope
-from .parser import (
-    _qualified_table,
-)
 from .scope_types import (
-    AMBIGUOUS_SCOPE_ID,
     CONSTANT_SCOPE_ID,
     NON_PHYSICAL_SOURCE_SCOPES,
     ScopeData,
@@ -21,7 +16,6 @@ from .scope_types import (
     SYSTEM_SCOPE_ID,
     SourceRef,
 )
-from sqlglot.errors import OptimizeError
 
 
 from ._constants import (  # noqa: F401 -- transitional re-export until WI-06 repoints importers
@@ -31,40 +25,9 @@ from ._constants import (  # noqa: F401 -- transitional re-export until WI-06 re
     _SCOPE_ID_ATTR,
 )
 
-def _source_type_from_id(source_id: str) -> str:
-    # AMBIGUOUS has no colon, so without this it classified as a physical table and downstream
-    # reported a table literally named "AMBIGUOUS" (LINEAGE-002).
-    if not source_id or source_id in {"UNKNOWN", AMBIGUOUS_SCOPE_ID}:
-        return "unknown"
-    return "scope" if ":" in source_id or source_id == "ROOT" else "physical_table"
-
-def _source_refs_from_detail_fields(items: list[dict | None]) -> list[SourceRef]:
-    refs: list[SourceRef] = []
-    for item in items:
-        if not item:
-            continue
-        scope = item.get("scope")
-        column = item.get("column")
-        if scope and column:
-            refs.append(SourceRef(
-                scope=scope,
-                column=column,
-                qualifier=item.get("qualifier"),
-                binding_scope_id=item.get("binding_scope_id"),
-                input_ref_id=item.get("input_ref_id"),
-            ))
-    return refs
 
 
-def _source_ref_binding_key(ref: SourceRef) -> tuple[str, str, str, str, str]:
-    """Return the field identity without collapsing distinct SQL input occurrences."""
-    return (
-        str(ref.scope or ""),
-        str(ref.column or ""),
-        str(ref.binding_scope_id or ""),
-        str(ref.input_ref_id or ""),
-        str(ref.qualifier or ""),
-    )
+
 
 
 from .expression_refs import (  # noqa: F401 -- transitional re-export until WI-06 repoints importers
@@ -76,6 +39,48 @@ from .expression_refs import (  # noqa: F401 -- transitional re-export until WI-
     _strip_sql_comments,
     _strip_sql_string_literals,
     extract_qualified_field_refs,
+)
+
+from .sqlglot_walk import (  # noqa: F401 -- transitional re-export (WI-06)
+    _POSSESSIVE_QUANTIFIER,
+    _REGEX_COLUMN_METACHARACTERS,
+    _classify_extended,
+    _compiled_column_pattern,
+    _contains_runtime_function,
+    _find_alias_in_parent,
+    _inside_nested_set_op,
+    _pivot_of_source_node,
+    _pivot_output_names,
+    _selected_sources,
+    _selected_sources_from_ast,
+    _source_free_leaf_sources,
+    _source_item_from_ast_node,
+    _source_ref_for_source,
+    _source_scope_id,
+    render_sql_or_none,
+)
+
+from .source_refs import (  # noqa: F401 -- transitional re-export (WI-06)
+    _constant_sources,
+    _dedupe_generated_source_dicts,
+    _dedupe_physical_field_dicts,
+    _dedupe_rowset_source_dicts,
+    _generated_sources_from_refs,
+    _is_cross_join_type,
+    _is_internal_scope_id,
+    _normalize_expression_resolution,
+    _physical_source_fields_for_ref,
+    _physical_source_fields_for_refs,
+    _physical_source_fields_from_refs,
+    _physical_source_ids_for_input,
+    _qualified_physical_field_sql,
+    _rowset_sources_from_upstream_output,
+    _source_kind_for_resolution,
+    _source_ref_binding_key,
+    _source_ref_to_dict,
+    _source_refs_from_detail_fields,
+    _source_type_from_id,
+    _system_sources,
 )
 
 from .expansion_budget import (  # noqa: F401 -- transitional re-export (WI-06)
@@ -242,338 +247,20 @@ def _union_branch_scope_output_for_mapping(
         return position_match, evidence
     return name_match, evidence
 
-def _is_internal_scope_id(scope_id: str) -> bool:
-    return scope_id == "ROOT" or scope_id.startswith(("cte:", "subq:", "union:", "udtf:"))
-
-def _is_cross_join_type(join_type: str | None) -> bool:
-    return str(join_type or "").upper() == "CROSS"
-
-def _physical_source_ids_for_input(
-    result: ScopeLineageResult,
-    source_id: str,
-    *,
-    seen: set[str] | None = None,
-    memo: dict[str, list[str]] | None = None,
-) -> list[str]:
-    if memo is None:
-        memo = {}
-    if not source_id or source_id == "UNKNOWN":
-        return []
-    if source_id in memo:
-        return list(memo[source_id])
-    if _source_type_from_id(source_id) == "physical_table":
-        memo[source_id] = [source_id]
-        return [source_id]
-    if seen is None:
-        seen = set()
-    if source_id in seen:
-        return []
-    seen.add(source_id)
-    scope_data = result.scopes.get(source_id)
-    if scope_data is None:
-        memo[source_id] = []
-        return []
-    physical_sources: list[str] = []
-    for edge in scope_data.input_edges:
-        for physical_source in _physical_source_ids_for_input(
-            result,
-            edge.source_id,
-            seen=set(seen),
-            memo=memo,
-        ):
-            if physical_source not in physical_sources:
-                physical_sources.append(physical_source)
-    if not physical_sources:
-        for column in scope_data.columns:
-            for ref in column.sources:
-                if ref.scope in NON_PHYSICAL_SOURCE_SCOPES:
-                    continue
-                for physical_source in _physical_source_ids_for_input(
-                    result,
-                    ref.scope,
-                    seen=set(seen),
-                    memo=memo,
-                ):
-                    if physical_source not in physical_sources:
-                        physical_sources.append(physical_source)
-    memo[source_id] = list(physical_sources)
-    return list(physical_sources)
-
-def _source_ref_to_dict(ref: SourceRef) -> dict[str, object]:
-    item: dict[str, object] = {"scope": ref.scope, "column": ref.column}
-    if ref.candidates:
-        item["candidates"] = [dict(candidate) for candidate in ref.candidates]
-    if ref.qualifier:
-        item["qualifier"] = ref.qualifier
-    if ref.binding_scope_id:
-        item["binding_scope_id"] = ref.binding_scope_id
-    if ref.input_ref_id:
-        item["input_ref_id"] = ref.input_ref_id
-    return item
-
-def _generated_sources_from_refs(refs: list[SourceRef], transform: str | None = None) -> list[dict[str, str]]:
-    generated: list[dict[str, str]] = []
-    seen: set[tuple[str, str, str]] = set()
-    for ref in refs:
-        if ref.scope not in {CONSTANT_SCOPE_ID, SYSTEM_SCOPE_ID}:
-            continue
-        generated_transform = ref.scope if ref.scope in {CONSTANT_SCOPE_ID, SYSTEM_SCOPE_ID} else (transform or "")
-        key = (ref.scope, ref.column, generated_transform)
-        if key in seen:
-            continue
-        seen.add(key)
-        generated.append(
-            {
-                "source_type": ref.scope,
-                "value": ref.column,
-                "transform": generated_transform,
-            }
-        )
-    return generated
-
-def _source_kind_for_resolution(
-    physical_fields: list[dict[str, str]],
-    generated_sources: list[dict[str, str]],
-    rowset_sources: list[dict[str, str]] | None = None,
-    *,
-    rowset_dominates_generated: bool = False,
-) -> str:
-    if rowset_dominates_generated and rowset_sources and not physical_fields:
-        return "rowset"
-    kinds = sum(
-        bool(items)
-        for items in (
-            physical_fields,
-            generated_sources,
-            rowset_sources or [],
-        )
-    )
-    if kinds > 1:
-        return "mixed"
-    if physical_fields:
-        return "physical"
-    if generated_sources:
-        return "generated"
-    if rowset_sources:
-        return "rowset"
-    return "unresolved"
-
-def _normalize_expression_resolution(
-    resolution: dict[str, object],
-    *,
-    scope_id: str | None = None,
-    field: str | None = None,
-    expression: str | None = None,
-) -> dict[str, object]:
-    physical_fields = [
-        dict(item)
-        for item in resolution.get("physical_source_fields") or []
-        if isinstance(item, dict)
-    ]
-    generated_sources = _dedupe_generated_source_dicts(
-        [
-            dict(item)
-            for item in resolution.get("generated_sources") or []
-            if isinstance(item, dict)
-        ]
-    )
-    rowset_sources = _dedupe_rowset_source_dicts(
-        [
-            dict(item)
-            for item in resolution.get("rowset_sources") or []
-            if isinstance(item, dict)
-        ]
-    )
-    union_branch_mappings = [
-        dict(item)
-        for item in resolution.get("union_branch_mappings") or []
-        if isinstance(item, dict)
-    ]
-    missing_reasons = [
-        str(reason)
-        for reason in resolution.get("missing_reasons") or []
-        if reason
-    ]
-    status = str(resolution.get("status") or "unresolved")
-    source_kind = str(
-        resolution.get("source_kind")
-        or _source_kind_for_resolution(physical_fields, generated_sources, rowset_sources)
-    )
-    if source_kind == "rowset" and not rowset_sources:
-        rowset_sources = [
-            {
-                "source_type": "rowset",
-                "scope": str(scope_id or resolution.get("scope") or ""),
-                "field": str(field or resolution.get("field") or ""),
-                "expression": str(expression or resolution.get("expanded_expression") or ""),
-            }
-        ]
-    has_source_fact = bool(
-        physical_fields
-        or generated_sources
-        or rowset_sources
-        or union_branch_mappings
-    )
-    if status == "resolved" and not has_source_fact:
-        status = "unresolved"
-        source_kind = "unresolved"
-        missing_reasons = _unique_ordered(
-            [*missing_reasons, "resolved_without_source_fact"]
-        )
-    elif status in {"unresolved", "partially_resolved"} and not missing_reasons:
-        missing_reasons = ["expression_resolution_incomplete"]
-    normalized = {
-        **resolution,
-        "status": status,
-        "physical_source_fields": physical_fields,
-        "generated_sources": generated_sources,
-        "source_kind": source_kind,
-        "missing_reasons": missing_reasons,
-    }
-    if expression and not normalized.get("expanded_expression"):
-        normalized["expanded_expression"] = str(expression)
-    if rowset_sources:
-        normalized["rowset_sources"] = rowset_sources
-    elif "rowset_sources" in normalized:
-        normalized.pop("rowset_sources", None)
-    if union_branch_mappings:
-        normalized["union_branch_mappings"] = union_branch_mappings
-    if resolution.get("candidate_source_refs"):
-        normalized["candidate_source_refs"] = list(resolution.get("candidate_source_refs") or [])
-    if resolution.get("scope_output_trace"):
-        normalized["scope_output_trace"] = list(resolution.get("scope_output_trace") or [])
-    return normalized
 
 
-def _dedupe_generated_source_dicts(sources: list[dict[str, str]]) -> list[dict[str, str]]:
-    deduped: list[dict[str, str]] = []
-    seen: set[tuple[str, str, str]] = set()
-    for item in sources:
-        if not isinstance(item, dict):
-            continue
-        source_type = str(item.get("source_type") or "")
-        value = str(item.get("value") or "")
-        transform = str(item.get("transform") or "")
-        key = (source_type, value, transform)
-        if not source_type or key in seen:
-            continue
-        seen.add(key)
-        deduped.append({"source_type": source_type, "value": value, "transform": transform})
-    return deduped
 
-def _dedupe_rowset_source_dicts(sources: list[dict[str, str]]) -> list[dict[str, str]]:
-    deduped: list[dict[str, str]] = []
-    seen: set[tuple[str, str, str, str]] = set()
-    for item in sources:
-        if not isinstance(item, dict):
-            continue
-        source_type = str(item.get("source_type") or "")
-        scope = str(item.get("scope") or "")
-        field = str(item.get("field") or "")
-        expression = str(item.get("expression") or "")
-        key = (source_type, scope, field, expression)
-        if not source_type or key in seen:
-            continue
-        seen.add(key)
-        deduped.append(
-            {
-                "source_type": source_type,
-                "scope": scope,
-                "field": field,
-                "expression": expression,
-            }
-        )
-    return deduped
 
-def _rowset_sources_from_upstream_output(
-    source_id: str,
-    field: str,
-    upstream: ScopeOutputField,
-) -> list[dict[str, str]]:
-    resolution = upstream.expression_resolution or {}
-    rowset_sources = [
-        dict(item)
-        for item in resolution.get("rowset_sources") or []
-        if isinstance(item, dict)
-    ]
-    if rowset_sources:
-        return _dedupe_rowset_source_dicts(rowset_sources)
-    if str(resolution.get("source_kind") or "") != "rowset":
-        return []
-    return [
-        {
-            "source_type": "rowset",
-            "scope": source_id,
-            "field": field,
-            "expression": str(upstream.expanded_expression or upstream.expression or ""),
-        }
-    ]
 
-def _physical_source_fields_from_refs(refs: list[SourceRef]) -> list[dict[str, str]]:
-    fields: list[dict[str, str]] = []
-    seen: set[tuple[str, str]] = set()
-    for ref in refs:
-        if (
-            not ref.scope
-            or ref.scope in NON_PHYSICAL_SOURCE_SCOPES
-            or _is_internal_scope_id(ref.scope)
-        ):
-            continue
-        key = (ref.scope, ref.column)
-        if key in seen:
-            continue
-        seen.add(key)
-        fields.append({"table": ref.scope, "field": ref.column})
-    return fields
 
-def _physical_source_fields_for_ref(
-    result: ScopeLineageResult,
-    ref: SourceRef,
-    *,
-    seen: set[tuple[str, str]] | None = None,
-) -> list[dict[str, str]]:
-    if not ref.scope or ref.scope in NON_PHYSICAL_SOURCE_SCOPES:
-        return []
-    if not _is_internal_scope_id(ref.scope):
-        return [{"table": ref.scope, "field": ref.column}]
 
-    if seen is None:
-        seen = set()
-    ref_key = (ref.scope, ref.column)
-    if ref_key in seen:
-        return []
-    seen.add(ref_key)
 
-    scope_data = result.scopes.get(ref.scope)
-    if scope_data is None:
-        return []
-    output = next((item for item in scope_data.outputs if item.name == ref.column), None)
-    if output is None:
-        return []
 
-    resolution = output.expression_resolution or {}
-    physical_fields = resolution.get("physical_source_fields") or []
-    if resolution.get("status") == "resolved" and physical_fields:
-        return [dict(item) for item in physical_fields if isinstance(item, dict)]
-    return []
 
-def _physical_source_fields_for_refs(
-    result: ScopeLineageResult,
-    refs: list[SourceRef],
-) -> list[dict[str, str]]:
-    fields: list[dict[str, str]] = []
-    seen: set[tuple[str, str]] = set()
-    for ref in refs:
-        for field in _physical_source_fields_for_ref(result, ref):
-            key = (str(field.get("table") or ""), str(field.get("field") or ""))
-            if not key[0] or not key[1] or key in seen:
-                continue
-            seen.add(key)
-            fields.append(field)
-    return fields
 
-def _qualified_physical_field_sql(table: str, field: str) -> str:
-    return f"`{table}`.`{field}`"
+
+
+
 
 def _resolve_expression_resolution_from_output_sources(result: ScopeLineageResult) -> None:
     output_lookup = {
@@ -962,20 +649,6 @@ def _scope_raw_sql_is_star_select(raw_sql: str | None) -> bool:
         return False
     return bool(re.match(r"(?is)^\s*SELECT\s+(?:DISTINCT\s+)?\*\s+FROM\b", raw_sql))
 
-def _dedupe_physical_field_dicts(fields: list[dict[str, str]]) -> list[dict[str, str]]:
-    deduped: list[dict[str, str]] = []
-    seen: set[tuple[str, str]] = set()
-    for item in fields:
-        if not isinstance(item, dict):
-            continue
-        table = str(item.get("table") or "")
-        field = str(item.get("field") or "")
-        key = (table, field)
-        if not table or not field or key in seen:
-            continue
-        seen.add(key)
-        deduped.append({"table": table, "field": field})
-    return deduped
 
 
 
@@ -991,273 +664,27 @@ def _dedupe_physical_field_dicts(fields: list[dict[str, str]]) -> list[dict[str,
 
 
 
-def _find_alias_in_parent(sg_scope: Scope) -> str | None:
-    """Find the alias this scope uses in its parent scope's sources."""
-    if sg_scope.is_udtf and isinstance(sg_scope.expression, exp.Lateral):
-        alias = sg_scope.expression.args.get("alias")
-        if alias is not None and alias.this is not None:
-            return alias.this.name if hasattr(alias.this, "name") else str(alias.this)
-    if sg_scope.parent is None:
-        return None
-    for name, src in sg_scope.parent.sources.items():
-        if src is sg_scope:
-            return name
-    return None
 
 
-def _constant_sources(expression: str | None) -> list[SourceRef]:
-    """Represent a literal as a traceable leaf instead of an empty lineage edge."""
-    literal = expression if expression else "<constant>"
-    return [SourceRef(scope=CONSTANT_SCOPE_ID, column=literal)]
-
-def _system_sources(expression: str | None) -> list[SourceRef]:
-    """Represent runtime/system expressions as traceable non-table leaves."""
-    label = expression if expression else "<system>"
-    return [SourceRef(scope=SYSTEM_SCOPE_ID, column=label)]
-
-def _selected_sources(sg_scope: Scope) -> dict:
-    """Return only sources that participate in the current SELECT FROM/JOIN list."""
-    try:
-        selected = sg_scope.selected_sources
-    except OptimizeError:
-        return _selected_sources_from_ast(sg_scope)
-    if not selected and sg_scope.sources:
-        reconstructed = _selected_sources_from_ast(sg_scope)
-        return reconstructed or sg_scope.sources
-    return {alias: source for alias, (_node, source) in selected.items()}
 
 
-def _selected_sources_from_ast(sg_scope: Scope) -> dict:
-    """Rebuild selected inputs when sqlglot rejects a repeated source alias.
-
-    ``Scope.sources`` also contains visible CTEs that are not selected by this query. Returning
-    it after ``selected_sources`` raises would make those unrelated CTEs candidates for every
-    unqualified column.
-    """
-    expression = sg_scope.expression
-    if not isinstance(expression, exp.Select):
-        return {}
-
-    items: list[tuple[str, Scope | exp.Table]] = []
-    from_ = expression.args.get("from_")
-    if from_ is not None:
-        item = _source_item_from_ast_node(getattr(from_, "this", None), sg_scope)
-        if item:
-            items.append(item)
-    for join in expression.args.get("joins") or []:
-        item = _source_item_from_ast_node(join.this, sg_scope)
-        if item:
-            items.append(item)
-    for udtf_scope in getattr(sg_scope, "udtf_scopes", []) or []:
-        alias = _find_alias_in_parent(udtf_scope) or "udtf"
-        items.append((alias, udtf_scope))
-
-    selected: dict[str, Scope | exp.Table] = {}
-    for alias, source in items:
-        key = alias
-        suffix = 2
-        while key in selected:
-            key = f"{alias}#{suffix}"
-            suffix += 1
-        selected[key] = source
-    return selected
 
 
-def _source_free_leaf_sources(inner: exp.Expression, expression: str) -> list[SourceRef]:
-    if _contains_runtime_function(inner):
-        return _system_sources(expression)
-    return _constant_sources(expression)
-
-def _contains_runtime_function(node: exp.Expression) -> bool:
-    runtime_names = {
-        "CURRENT_DATE",
-        "CURRENT_TIMESTAMP",
-        "CURRENT_TIME",
-        "NOW",
-        "RAND",
-        "RANDOM",
-        "UUID",
-        "UNIX_TIMESTAMP",
-    }
-    for expr in node.walk():
-        if isinstance(expr, (exp.CurrentDate, exp.CurrentTimestamp, exp.Rand)):
-            return True
-        if isinstance(expr, exp.Anonymous):
-            name = expr.name.upper() if hasattr(expr, "name") else ""
-            if name in runtime_names:
-                return True
-    sql = node.sql(dialect=DIALECT).upper()
-    return any(f"{name}(" in sql or name in {"CURRENT_DATE", "CURRENT_TIMESTAMP"} and name in sql for name in runtime_names)
-
-def render_sql_or_none(tree: exp.Expression) -> str | None:
-    """Print a parsed tree back to SQL, or give up without taking the caller down.
-
-    Generation is not total. A statement whose identifier collides with a tokenizer keyword
-    parses into a node the Spark generator cannot render -- `CAST(out AS DOUBLE)` yields a Cast
-    whose `to` is None and `cast_sql` dereferences it -- and the AttributeError escaped the
-    public API entirely (REGEN-001). One statement that cannot be *printed* must not cost a
-    batch its other results, which is the whole reason broken statements are kept.
-
-    The lineage is built from the AST, never from this string, so failing here costs a
-    convenience field and nothing else. Returns None so the caller decides what to record.
-    """
-    try:
-        return tree.sql(dialect=DIALECT)
-    except Exception:  # noqa: BLE001 - any generator failure, not a known subset
-        return None
 
 
-def _inside_nested_set_op(root: exp.Expression, node: exp.Expression) -> bool:
-    """Return True when ``node`` sits inside a nested SELECT or set-op branch of ``root``.
-
-    Deliberately distinct from expression_refs._inside_nested_subquery: this one treats a
-    UNION between node and root as nesting (resolvers must not attribute a set-op branch's
-    columns to the outer expression) but does NOT stop at a bare exp.Subquery wrapper, and
-    it accepts any node -- the resolvers also probe subquery nodes, not just columns.
-    """
-    if node is root:
-        return False
-    parent = node.parent
-    while parent is not None and parent is not root:
-        if isinstance(parent, (exp.Select, exp.Union)):
-            return True
-        parent = parent.parent
-    return False
-
-def _source_item_from_ast_node(
-    node: exp.Expression | None,
-    sg_scope: Scope,
-) -> tuple[str, Scope | exp.Table] | None:
-    if node is None:
-        return None
-    alias = node.alias if isinstance(node, (exp.Table, exp.Subquery)) else None
-    source: Scope | exp.Table | None = None
-    if isinstance(node, exp.Table):
-        # A table reference may actually name a CTE; resolve that through the
-        # scope source map by table name. Physical tables can be used directly.
-        named_source = sg_scope.sources.get(node.name)
-        if isinstance(named_source, Scope):
-            source = named_source
-        else:
-            source = node
-        alias = alias or node.name
-    elif isinstance(node, exp.Subquery):
-        if alias:
-            # Preserve AST identity before consulting the alias dictionary. sqlglot stores
-            # sources by alias, so a repeated alias keeps only the last subquery and would
-            # otherwise make every duplicate appear to be that same scope.
-            for scope_list_name in ("derived_table_scopes", "subquery_scopes"):
-                for sub_scope in getattr(sg_scope, scope_list_name, []) or []:
-                    if sub_scope.expression is node.this:
-                        source = sub_scope
-                        break
-                if source is not None:
-                    break
-            if source is None:
-                mapped = sg_scope.sources.get(alias)
-                if isinstance(mapped, Scope):
-                    source = mapped
-    if alias and source is not None:
-        return alias, source
-    return None
-
-def _source_ref_for_source(
-    alias: str,
-    source: Scope | exp.Table,
-    col_name: str,
-    result: ScopeLineageResult,
-) -> SourceRef:
-    if isinstance(source, Scope):
-        upstream_id = _source_scope_id(alias, source, result)
-        if upstream_id:
-            return SourceRef(scope=upstream_id, column=col_name)
-        return SourceRef(scope="UNKNOWN", column=col_name)
-    return SourceRef(scope=_qualified_table(source), column=col_name)
-
-def _source_scope_id(alias: str, source: Scope, result: ScopeLineageResult) -> str | None:
-    """Return a stable result scope id for a sqlglot Scope source."""
-    upstream_id = getattr(source, _SCOPE_ID_ATTR, None)
-    if upstream_id in result.scopes:
-        return upstream_id
-    for candidate in (f"cte:{alias}", f"subq:{alias}", f"union:{alias}"):
-        if candidate in result.scopes:
-            return candidate
-    return upstream_id
-
-def _classify_extended(node: exp.Expression) -> str:
-    """Classify expression type. Extends parser._classify with UNION and EXPAND_ALL."""
-    if isinstance(node, exp.Star):
-        return "EXPAND_ALL"
-    if isinstance(node, exp.Column) and isinstance(node.this, exp.Star):
-        return "EXPAND_ALL"
-    if isinstance(node, exp.Window):
-        return "WINDOW"
-    if isinstance(node, exp.AggFunc):
-        return "AGGREGATE"
-    if isinstance(node, (exp.Case, exp.If)):
-        return "CONDITIONAL"
-    if isinstance(node, exp.Subquery):
-        return "EXPRESSION"  # LITERAL_SUBQUERY mapped to EXPRESSION per design decision
-    if isinstance(node, (exp.Literal, exp.Boolean, exp.Null)):
-        return "CONSTANT"
-    if isinstance(node, exp.Column):
-        return "DIRECT"
-    # Check for Anonymous UDAFs
-    if isinstance(node, exp.Anonymous):
-        func_name = node.name.upper() if hasattr(node, "name") else ""
-        if func_name in _KNOWN_UDAFS:
-            return "AGGREGATE"
-    return "EXPRESSION"
 
 
-_REGEX_COLUMN_METACHARACTERS = set(".*+?[]()|^$\\")
-
-_POSSESSIVE_QUANTIFIER = re.compile(r"\(((?:[^()\\]|\\.)*)\)([?*+])\+")
-
-def _compiled_column_pattern(pattern: str):
-    """Compile a Spark column pattern the same way on every supported Python.
-
-    Spark's exclusion idiom uses a possessive quantifier — ``(dt)?+.+`` reads as "every
-    column except dt", because ``(dt)?+`` consumes ``dt`` without giving it back. Python
-    only accepts that syntax from 3.11, and this project supports 3.9, so it is rewritten
-    to the lookahead-and-backreference form that behaves identically everywhere. Letting
-    the compile simply fail on older interpreters would make the same SQL produce different
-    lineage depending on the Python running it.
-    """
-    for candidate in (pattern, _POSSESSIVE_QUANTIFIER.sub(r"(?=((?:\1)\2))\\1", pattern)):
-        try:
-            return re.compile(candidate)
-        except re.error:
-            continue
-    return None
 
 
-def _pivot_of_source_node(node) -> object | None:
-    """Return the PIVOT attached to a FROM/JOIN item, if it has one."""
-    pivots = getattr(node, "args", {}).get("pivots") or []
-    return pivots[0] if pivots else None
 
 
-def _pivot_output_names(pivot) -> list[str] | None:
-    """Column names a PIVOT produces, or None when the IN list is not a literal list.
 
-    The IN list is the column set: ``FOR k IN ('A', 'B')`` produces columns A and B. A
-    subquery or ANY in that position leaves the set unknowable, and the caller must report
-    a gap rather than bind to a name it guessed (PIVOT-001).
-    """
-    from sqlglot import exp
 
-    fields = getattr(pivot, "args", {}).get("fields") or []
-    names: list[str] = []
-    for field in fields:
-        if not isinstance(field, exp.In):
-            return None
-        for item in field.expressions:
-            if isinstance(item, exp.Alias):
-                names.append(item.alias)
-                continue
-            if isinstance(item, exp.Literal):
-                names.append(str(item.this))
-                continue
-            return None
-    return names or None
+
+
+
+
+
+
+
+
