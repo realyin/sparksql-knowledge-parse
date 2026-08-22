@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+- **Breaking**: removed the v1-era result types `Column`, `ColumnRef`, `JoinKey`,
+  `LineageResult`, and `Unresolved` from the public API. Nothing inside the package, the test
+  suite, or the approved consumer surface referenced them; they predate `ScopeLineageResult`
+  and had no producer. Consumers of the current parser entry points are unaffected.
+
 ## 0.1.16
 - MERGE assignment values now resolve in the scope their WHEN branch can actually see. Spark
   picks the name-resolution scope from the clause -- a MATCHED action sees target and source

@@ -64,7 +64,6 @@ from .scope.scope_types import (
 )
 from .scope.sqlglot_config import suppress_invalid_json_path_warnings
 from .scope.task_lineage import TaskLineageResult, parse_task_lineage
-from .scope.types import Column, ColumnRef, JoinKey, LineageResult, Unresolved
 from .contract.fold import fold_session_scoped
 from .render.mapping_markdown import render_mapping_markdown, render_warnings_markdown
 from .serialize.scope_profile import build_scope_profile
@@ -72,15 +71,11 @@ from .serialize.scope_profile import build_scope_profile
 
 PUBLIC_CORE_API = frozenset({
     "PUBLIC_CORE_API",
-    "Column",
-    "ColumnRef",
     "CONSTANT_SCOPE_ID",
     "DiagnosticWarning",
     "Diagnostics",
     "fold_session_scoped",
     "DictSchemaProvider",
-    "JoinKey",
-    "LineageResult",
     "MetadataFileError",
     "NoSupportedWriteStatementError",
     "NON_PHYSICAL_SOURCE_SCOPES",
@@ -101,7 +96,6 @@ PUBLIC_CORE_API = frozenset({
     "TargetMetadataMap",
     "TargetTableMetadata",
     "TaskLineageResult",
-    "Unresolved",
     "build_end_to_end_lineage",
     "build_scope_profile",
     "catalog_prefixes",
