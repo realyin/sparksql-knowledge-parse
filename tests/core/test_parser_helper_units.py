@@ -15,10 +15,7 @@ from __future__ import annotations
 
 # Only these two need a module-level import: the other three carry the local imports they were
 # written with. From the module that defines them, not scope_builder's re-export.
-from scope_lineage.scope._shared import (
-    _replace_qualified_ref_with_expression,
-    _replace_unqualified_ref_with_expression,
-)
+from scope_lineage.scope.expression_text import _replace_qualified_ref_with_expression, _replace_unqualified_ref_with_expression
 
 
 def test_qualified_ref_replacement_removes_existing_alias_expression_wrapper():
@@ -99,15 +96,17 @@ def test_star_inside_a_union_branch_still_counts_as_a_star():
 # --- WI-03: one ordered-dedupe implementation, two deliberately distinct nesting probes ---
 
 def test_unique_ordered_dedupes_preserves_order_and_skips_falsy():
-    from scope_lineage.scope._shared import _unique_ordered
+    from scope_lineage.scope.sequences import _unique_ordered
 
     assert _unique_ordered(["b", "a", "b", "", None, "a", "c"]) == ["b", "a", "c"]
 
 
-def test_resolver_alias_for_unique_ordered_is_gone():
-    import scope_lineage.scope._shared as shared
+def test_the_shared_grab_bag_module_stays_deleted():
+    # WI-06 split _shared.py into themed modules; the resolver-alias trap it hosted
+    # (WI-03) went with it. A revived grab-bag would be architecture drift.
+    import importlib.util
 
-    assert not hasattr(shared, "_unique_ordered__resolver")
+    assert importlib.util.find_spec("scope_lineage.scope._shared") is None
 
 
 def test_inside_nested_subquery_stops_at_subquery_boundary():
@@ -124,7 +123,7 @@ def test_inside_nested_subquery_stops_at_subquery_boundary():
 def test_inside_nested_set_op_takes_root_first_and_guards_root_identity():
     import sqlglot
     from sqlglot import exp
-    from scope_lineage.scope._shared import _inside_nested_set_op
+    from scope_lineage.scope.sqlglot_walk import _inside_nested_set_op
 
     parsed = sqlglot.parse_one("SELECT a FROM t UNION ALL SELECT b FROM u", dialect="spark")
     columns = {col.name: col for col in parsed.find_all(exp.Column)}

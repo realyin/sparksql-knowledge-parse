@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import sqlglot
 
-from scope_lineage.scope._shared import DIALECT, PARSE_OPTS
+from scope_lineage.scope._constants import DIALECT, PARSE_OPTS
 from scope_lineage.scope.scope_builder import parse_all_scope_lineage
 from scope_lineage.scope.task_lineage import parse_task_lineage
 

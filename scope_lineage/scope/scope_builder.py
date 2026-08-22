@@ -40,10 +40,13 @@ from .select_scope import _star_modifiers
 from .scope_warnings import detect_warnings
 from .scope_role_inferrer import infer_roles
 from ..sqlglot_config import suppress_invalid_json_path_warnings
-from ._shared import DIALECT, PARSE_OPTS, render_sql_or_none, _ORIGINALLY_UNQUALIFIED_META, _SCOPE_ID_ATTR, _inside_nested_subquery, _find_alias_in_parent, _unique_ordered
+from ._constants import DIALECT, PARSE_OPTS, _ORIGINALLY_UNQUALIFIED_META, _SCOPE_ID_ATTR
+from .expression_refs import _inside_nested_subquery
+from .sequences import _unique_ordered
+from .sqlglot_walk import _find_alias_in_parent, render_sql_or_none
 # Re-exported only for the private integration repository, whose tests reach these through
 # this module instead of through ._shared. Nothing in this module uses them.
-from ._shared import _source_item_from_ast_node
+from .sqlglot_walk import _source_item_from_ast_node
 from .lineage_fact_gaps import _mark_gaps_from_recovered_syntax
 from .scope_facts import _populate_enhanced_scope_facts
 

@@ -16,21 +16,11 @@ from .scope_types import (
 # Leaf helpers come from `_shared`, never from the orchestrator: importing it back
 # formed a cycle that only worked because Python hands out a partially-initialised
 # module, making import order load-bearing (ARCH-001).
-from ._shared import (
-    _dedupe_generated_source_dicts,
-    _generated_sources_from_refs,
-    _cached_pattern,
-    _is_internal_scope_id,
-    _physical_fields_referenced_in_expression,
-    _qualified_physical_field_sql,
-    _qualifier_present,
-    _replace_qualified_ref_with_expression,
-    _replace_struct_field_access_from_upstream,
-    _replace_unqualified_ref_with_expression,
-    _source_kind_for_resolution,
-    _unexpanded_bound_aliases_in_expression,
-)
-from ._shared import ExpansionBudget
+from .expression_expansion import _physical_fields_referenced_in_expression, _replace_struct_field_access_from_upstream
+from .expression_refs import _cached_pattern
+from .expression_text import _qualifier_present, _replace_qualified_ref_with_expression, _replace_unqualified_ref_with_expression, _unexpanded_bound_aliases_in_expression
+from .source_refs import _dedupe_generated_source_dicts, _generated_sources_from_refs, _is_internal_scope_id, _qualified_physical_field_sql, _source_kind_for_resolution
+from .expansion_budget import ExpansionBudget
 
 
 def _propagate_passthrough_expression_resolution(result: ScopeLineageResult) -> None:

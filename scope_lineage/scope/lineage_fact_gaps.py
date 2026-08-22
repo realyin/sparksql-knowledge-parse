@@ -15,12 +15,9 @@ from .scope_types import (
 # Leaf helpers come from `_shared`, never from the orchestrator: importing it back
 # formed a cycle that only worked because Python hands out a partially-initialised
 # module, making import order load-bearing (ARCH-001).
-from ._shared import (
-    DIALECT,
-    PARSE_OPTS,
-    _source_kind_for_resolution,
-    _unique_ordered,
-)
+from ._constants import DIALECT, PARSE_OPTS
+from .sequences import _unique_ordered
+from .source_refs import _source_kind_for_resolution
 
 
 def _populate_lineage_fact_gaps(result: ScopeLineageResult) -> None:

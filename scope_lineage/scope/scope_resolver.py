@@ -26,12 +26,11 @@ from .scope_types import (
     ScopeLineageResult,
     DiagnosticWarning,
 )
-from ._shared import DIALECT, _KNOWN_UDAFS, _SCOPE_ID_ATTR, _classify_extended, _constant_sources, _contains_runtime_function, _inside_nested_set_op, _selected_sources, _source_free_leaf_sources, _source_item_from_ast_node, _source_ref_for_source, _source_scope_id, _system_sources  # noqa: F401  (shared helpers; re-exported)
+from ._constants import DIALECT, _SCOPE_ID_ATTR
+from .source_refs import _constant_sources
+from .sqlglot_walk import _classify_extended, _inside_nested_set_op, _source_free_leaf_sources
 from .column_ref_resolver import _ambiguous_ref, _materialized_star_column_state, _resolve_column_refs_in_expr  # noqa: F401
-from ._shared import (  # noqa: F401
-    _REGEX_COLUMN_METACHARACTERS,
-    _compiled_column_pattern,
-)
+from .sqlglot_walk import _REGEX_COLUMN_METACHARACTERS, _compiled_column_pattern
 from .select_scope import _resolve_select_scope, _star_modifiers  # noqa: F401
 from .target_field_binding import apply_target_field_binding
 

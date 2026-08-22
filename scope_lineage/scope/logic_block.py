@@ -19,7 +19,10 @@ from .scope_types import (
     SourceRef,
 )
 from .column_ref_resolver import _resolve_column_refs_in_expr
-from ._shared import _extend_unique, _function_names, _is_cross_join_type, _is_internal_scope_id, _normalize_expression_resolution, _physical_source_fields_for_refs, _physical_source_fields_from_refs, _physical_source_ids_for_input, _source_ref_binding_key, _source_ref_to_dict, _source_refs_from_detail_fields, _source_type_from_id, _unique_ordered, DIALECT, PARSE_OPTS, _SCOPE_ID_ATTR
+from ._constants import DIALECT, PARSE_OPTS, _SCOPE_ID_ATTR
+from .expression_text import _function_names
+from .sequences import _extend_unique, _unique_ordered
+from .source_refs import _is_cross_join_type, _is_internal_scope_id, _normalize_expression_resolution, _physical_source_fields_for_refs, _physical_source_fields_from_refs, _physical_source_ids_for_input, _source_ref_binding_key, _source_ref_to_dict, _source_refs_from_detail_fields, _source_type_from_id
 from .column_expression_resolution import _expression_resolution_for_scope_column
 
 

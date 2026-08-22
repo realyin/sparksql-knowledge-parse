@@ -9,7 +9,8 @@ import sqlglot
 from sqlglot import exp
 
 from ..metadata.schema_metadata import DictSchemaProvider
-from ._shared import DIALECT, PARSE_OPTS, render_sql_or_none
+from ._constants import DIALECT, PARSE_OPTS
+from .sqlglot_walk import render_sql_or_none
 from .end_to_end import _physical_fields_for_scope_column
 from .scope_types import ScopeLineageResult
 from .ctas_missing_as import repair_ctas_missing_as
