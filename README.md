@@ -287,21 +287,21 @@ scope-lineage parse \
 
 See [Task Lineage 2.0](docs/zh-CN/task-lineage-v2.md).
 
-### Migrating to the task contract
+### Migrating from the removed contract 1.0
 
-Contract 1.0 (one artifact per projection write, `--contract-version 1.0`) is deprecated and
-scheduled for removal one minor release after 0.2.0. Migration is mostly re-pointing:
+The standalone contract-1.0 output mode (one artifact per projection write) has been
+removed. Migration is mostly re-pointing:
 
-- A v2 document's `statement_lineage` maps each `statement_id` to exactly the v1 statement
-  document shape, in `statement_sequence` order — code that consumed a v1 `lineage.json`
-  consumes one entry unchanged.
-- Task-level answers move up a level: `end_to_end_lineage` (final-state view),
-  `table_state_graph`, `final_table_states`, and `task_dependencies` are new top-level
-  facts v1 never had.
-- `render` and `render_mapping_markdown` accept both shapes; a task document renders one
-  mapping section per statement.
-- The library writer `write_lineage` (v1 artifact) emits a `DeprecationWarning`;
-  `write_task_lineage` replaces it. The statement converter `to_lineage_dict` stays.
+- A task document's `statement_lineage` maps each `statement_id` to exactly the former
+  v1 statement document shape, in `statement_sequence` order — code that consumed a v1
+  `lineage.json` consumes one entry unchanged, and `lineage.schema.json` remains that
+  entry's schema.
+- Task-level answers live at the top level: `end_to_end_lineage` (final-state view),
+  `table_state_graph`, `final_table_states`, and `task_dependencies`.
+- `render` and `render_mapping_markdown` accept a task document (one mapping section per
+  statement) and still accept a single statement document.
+- The library writer is `write_task_lineage`; the statement converter `to_lineage_dict`
+  stays. `write_lineage` is gone.
 
 Render a human- and machine-readable field-mapping document (`mapping.md`) from artifacts
 that already exist:
@@ -429,16 +429,23 @@ Documentation:
 ## Python API
 
 ```python
-from scope_lineage import parse_scope_lineage, to_lineage_dict, write_lineage
+from scope_lineage import parse_task_lineage, to_lineage_dict, write_task_lineage
 
-result = parse_scope_lineage(
+task = parse_task_lineage(
     "INSERT INTO mart.user_ids SELECT id FROM ods.users",
     task_name="user_ids",
     schema={"ods.users": ["id"]},
 )
+write_task_lineage(task, "/tmp/scope-lineage/user_ids")
 
-document = to_lineage_dict(result)
-write_lineage(result, "/tmp/scope-lineage/user_ids")
+# per-statement documents (the shape each statement_lineage entry embeds):
+from scope_lineage import parse_scope_lineage
+
+statement = parse_scope_lineage(
+    "INSERT INTO mart.user_ids SELECT id FROM ods.users",
+    task_name="user_ids",
+)
+document = to_lineage_dict(statement)
 ```
 
 The supported public surface is declared by `scope_lineage.PUBLIC_CORE_API`. Consumers should use
@@ -446,7 +453,8 @@ that facade or the JSON contracts instead of importing internal modules.
 
 ## Contracts and limits
 
-Both output documents currently require `schema_version: "1.0"` and are validated before writing.
+The task documents carry `schema_version: "2.0"`; each `statement_lineage` entry keeps the
+statement-document shape (`schema_version: "1.0"`). Both are validated before writing.
 Within major version 1, consumers must tolerate additive optional fields. Removal, renaming, or a
 semantic change requires a new major contract version.
 

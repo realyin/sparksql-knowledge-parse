@@ -1,6 +1,13 @@
 # Changelog
 
 ## Unreleased
+- **Breaking**: the standalone contract-1.0 output mode is removed. `write_lineage` is
+  gone from the API; the CLI accepts `--contract-version 2.0` only (the flag stays one
+  release so a `1.0` request fails with a clear choices error). The statement-document
+  SHAPE is not retired: every `statement_lineage` entry keeps it, `lineage.schema.json` /
+  `diagnostics.schema.json` remain as its schemas, the converters
+  (`to_lineage_dict` / `to_lineage_json` / `to_dict` / `to_json`) stay public, and the
+  golden statement corpus now validates every embedded entry against that schema.
 - **Breaking**: removed four facade exports with no remaining consumer
   (`build_end_to_end_lineage`, `build_scope_profile`, `materialize_schema`,
   `table_details_for_table`) after the downstream consumer's retirement was confirmed.

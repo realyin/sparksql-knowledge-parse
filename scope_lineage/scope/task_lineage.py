@@ -578,10 +578,10 @@ def _apply_projection_write(
     dynamic_partition_overwrite: bool = False,
 ) -> None:
     # Known inverted edge (scope -> contract), whitelisted by the dependency-direction
-    # architecture test. statement_lineage entries are contract dicts that this module and
-    # cli.py consume in four places, and TaskLineageResult's shape is public contract, so
-    # untangling this belongs to the v1 retirement's converter re-homing (governance plan
-    # WI-12, 0.3.0), not to a standalone move.
+    # architecture test and kept at the v1 retirement (WI-12, 0.3.0): statement_lineage
+    # entries ARE the task contract's payload, so assembling them through the statement
+    # converter is this module's job; re-homing the converter would only trade this
+    # documented edge for a scope<->serialize package cycle.
     from ..contract.lineage import to_lineage_dict
 
     result = parse_scope_lineage(

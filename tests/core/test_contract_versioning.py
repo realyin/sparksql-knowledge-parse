@@ -13,7 +13,6 @@ from scope_lineage.contract import (
     to_lineage_dict,
     validate_diagnostics_document,
     validate_lineage_document,
-    write_lineage,
 )
 from scope_lineage.scope.scope_builder import parse_scope_lineage
 
@@ -64,7 +63,9 @@ def test_writer_validates_the_documents_that_are_actually_written(tmp_path) -> N
         "written_contract",
         schema={"ods.source": ["id"]},
     )
-    output = write_lineage(result, tmp_path)
+    from .statement_document import write_statement_documents
+
+    output = write_statement_documents(result, tmp_path)
     lineage = json.loads((output / "lineage.json").read_text(encoding="utf-8"))
     diagnostics = json.loads((output / "diagnostics.json").read_text(encoding="utf-8"))
 

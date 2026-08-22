@@ -52,6 +52,5 @@
   "validate_cross_references",
   "validate_diagnostics_document",
   "validate_lineage_document",
-  "write_lineage",
   "write_task_lineage"
 ]

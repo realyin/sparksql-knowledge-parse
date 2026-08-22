@@ -63,17 +63,6 @@ jobs:
           python -m venv /tmp/scope-lineage-wheel
           /tmp/scope-lineage-wheel/bin/python -m pip install dist/*.whl
           cd /tmp
-          # Explicit 1.0: this call kept v1 smoke-covered implicitly while 1.0 was the
-          # default; with 2.0 as the default it must ask for v1 to keep covering it
-          # through the deprecation window (drop together with v1).
-          /tmp/scope-lineage-wheel/bin/scope-lineage parse \
-            --task-file "$GITHUB_WORKSPACE/examples/tasks/customer/customer_profile_daily.json" \
-            --contract-version 1.0 \
-            --schema "$GITHUB_WORKSPACE/examples/metadata/schema_info.csv" \
-            --target-ddl-metadata "$GITHUB_WORKSPACE/examples/metadata/target_tables" \
-            --out /tmp/scope-lineage-output
-          test -f /tmp/scope-lineage-output/customer_profile_daily/lineage.json
-          test -f /tmp/scope-lineage-output/customer_profile_daily/diagnostics.json
           /tmp/scope-lineage-wheel/bin/scope-lineage parse \
             --task-file "$GITHUB_WORKSPACE/examples/tasks/customer/customer_profile_daily.json" \
             --contract-version 2.0 \

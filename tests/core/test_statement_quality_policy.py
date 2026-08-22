@@ -61,42 +61,40 @@ def test_skipped_statements_have_stable_task_level_identity_and_category() -> No
     ]
 
 
-def test_cli_counts_unsupported_mutation_once_per_task_and_balanced_rejects_it(
+def test_cli_models_the_mixed_scripts_delete_and_gates_on_the_root_gap(
     tmp_path: Path,
     capsys,
 ) -> None:
+    """The task contract models DELETE, so the retired v1 unsupported-mutation count is
+    zero here by design; what survives of the script's uncertainty is a root-impact gap,
+    and that is what the strict policy gates on."""
     sql_path = tmp_path / "mixed.sql"
     _mixed_script(sql_path)
 
-    # Pinned to 1.0: the per-statement quality gate is v1 policy machinery; the task
-    # contract models these mutations as table state instead of counting them.
     assert main([
         "parse",
-        "--contract-version",
-        "1.0",
         "--sql-file",
         str(sql_path),
         "--out",
         str(tmp_path / "permissive"),
     ]) == 0
-    assert "unsupported_mutations=1" in capsys.readouterr().out
+    summary = capsys.readouterr().out
+    assert "unsupported_mutations=0" in summary
+    assert "root_gap_results=1" in summary
 
     assert main([
         "parse",
-        "--contract-version",
-        "1.0",
         "--sql-file",
         str(sql_path),
         "--quality-policy",
-        "balanced",
+        "strict",
         "--allow-partial",
         "--out",
-        str(tmp_path / "balanced"),
+        str(tmp_path / "strict"),
     ]) == 1
-    assert "unsupported_mutations=1" in capsys.readouterr().out
 
 
-def test_explicit_unsupported_mutation_gate_does_not_require_balanced_policy(
+def test_explicit_root_gap_flag_gates_without_the_strict_policy(
     tmp_path: Path,
 ) -> None:
     sql_path = tmp_path / "mixed.sql"
@@ -104,15 +102,13 @@ def test_explicit_unsupported_mutation_gate_does_not_require_balanced_policy(
 
     assert main([
         "parse",
-        "--contract-version",
-        "1.0",
         "--sql-file",
         str(sql_path),
-        "--fail-on-unsupported-mutation",
+        "--fail-on-root-gap",
+        "--allow-partial",
         "--out",
         str(tmp_path / "output"),
     ]) == 1
-
 
 def test_strict_policy_rejects_root_fact_gaps_and_recovered_syntax(
     tmp_path: Path,

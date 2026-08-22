@@ -116,12 +116,14 @@ def test_the_cached_relation_flag_reaches_the_contract(tmp_path) -> None:
     """
     import json
 
-    from scope_lineage import parse_scope_lineage, write_lineage
+    from scope_lineage import parse_scope_lineage
+
+    from .statement_document import write_statement_documents
 
     cached = parse_scope_lineage(
         "cache lazy table tmp_part1 as select id, v from ods.s", "cached", schema=SCHEMA
     )
-    output = write_lineage(cached, tmp_path / "cached")
+    output = write_statement_documents(cached, tmp_path / "cached")
     document = json.loads((output / "lineage.json").read_text(encoding="utf-8"))
     assert document["stmt_kind"] == "CTAS"
     assert document["is_cached_relation"] is True
@@ -129,7 +131,7 @@ def test_the_cached_relation_flag_reaches_the_contract(tmp_path) -> None:
     plain = parse_scope_lineage(
         "create table mart.t2 as select id, v from ods.s", "plain", schema=SCHEMA
     )
-    output = write_lineage(plain, tmp_path / "plain")
+    output = write_statement_documents(plain, tmp_path / "plain")
     document = json.loads((output / "lineage.json").read_text(encoding="utf-8"))
     assert document["stmt_kind"] == "CTAS"
     assert "is_cached_relation" not in document

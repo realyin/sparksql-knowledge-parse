@@ -35,7 +35,7 @@ def test_a_double_semicolon_is_recorded_as_an_empty_statement():
 
 def test_the_recorded_entry_satisfies_the_published_schema():
     # The previous draft of this fix omitted `supported`, which the schema requires --
-    # write_lineage validates before writing, so that draft would have raised at
+    # The statement-document assembly validates before writing, so that draft would have raised at
     # serialization rather than produced a wrong document.
     with open("scope_lineage/schemas/lineage.schema.json") as handle:
         item_schema = json.load(handle)["properties"]["skipped_statements"]["items"]

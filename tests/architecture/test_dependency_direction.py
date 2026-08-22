@@ -49,10 +49,10 @@ def _imported_package(node: ast.ImportFrom, importer_pkg: str) -> str | None:
     return (node.module or "").split(".")[0] or None
 
 
-# One known inverted edge, kept deliberately: statement_lineage entries are contract dicts
-# whose shape is public API, consumed inside scope/task_lineage and cli. Untangling it is
-# scheduled with the v1 retirement's converter re-homing (governance plan WI-12, 0.3.0);
-# remove this entry when that lands, or annotate the decision here if it is kept.
+# One known inverted edge, evaluated at the v1 retirement (governance plan WI-12, 0.3.0)
+# and KEPT: statement_lineage entries are the task contract's own payload, so the task
+# builder legitimately assembles them through the statement converter; re-homing the
+# converter would only trade this documented edge for a scope<->serialize package cycle.
 WHITELISTED_EDGES = {
     ("scope/task_lineage.py", "contract"),
 }

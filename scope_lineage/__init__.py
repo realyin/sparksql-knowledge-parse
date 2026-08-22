@@ -10,7 +10,6 @@ from .contract import (
     validate_cross_references,
     validate_diagnostics_document,
     validate_lineage_document,
-    write_lineage,
     write_task_lineage,
 )
 from .contract.lineage import to_dict, to_json
@@ -119,7 +118,6 @@ PUBLIC_CORE_API = frozenset({
     "validate_diagnostics_document",
     "validate_cross_references",
     "validate_lineage_document",
-    "write_lineage",
     "write_task_lineage",
 })
 

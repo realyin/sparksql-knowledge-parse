@@ -1,13 +1,14 @@
-"""Pure conversion and writer for the versioned Lineage contract.
+"""Pure conversion for the per-statement Lineage document.
+
+The standalone v1 artifact writer is retired; these converters remain because the
+task contract embeds one statement document per statement_lineage entry.
 
 This module intentionally has no dependency on Profile, Insight, Preset, Refactor, or Pipeline.
 """
 
 from __future__ import annotations
 
-import copy as _copy
 import json
-from pathlib import Path
 from typing import Any
 
 from ..scope.scope_types import (
@@ -29,7 +30,6 @@ from ..scope.scope_types import (
 from ..scope.end_to_end import build_end_to_end_lineage
 from ..scope.parser import resolve_display_expression
 from ..serialize.scope_profile import build_scope_profile
-from .validation import validate_cross_references, validate_lineage_document
 
 def to_dict(obj: Any) -> Any:
     """Recursively convert a dataclass (or nested structure) to a JSON-safe dict.
@@ -124,63 +124,6 @@ def to_lineage_json(result: ScopeLineageResult, indent: int = 2) -> str:
     """Serialize the complete Lineage contract document."""
     return to_json(result, indent=indent)
 
-
-def write_lineage(
-    result: ScopeLineageResult,
-    output_dir: str | Path,
-    *,
-    compact: bool = False,
-) -> Path:
-    """Validate and write only lineage.json plus diagnostics.json."""
-    import warnings as _warnings
-
-    # Deprecation applies to the standalone v1 ARTIFACT, not to the statement->dict
-    # converter: the v2 task document builds its statement_lineage entries through
-    # to_lineage_dict, which therefore stays undeprecated.
-    _warnings.warn(
-        "write_lineage emits the deprecated contract-1.0 artifact, scheduled for "
-        "removal; write_task_lineage (contract 2.0) replaces it",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    data = to_lineage_dict(result)
-    xref_errors = validate_cross_references(data)
-    if xref_errors:
-        raise ValueError(
-            f"Cross-reference validation failed ({len(xref_errors)} errors):\\n"
-            + "\\n".join(xref_errors[:5])
-        )
-
-    diagnostics_full = data.get("diagnostics", {})
-    lineage_data = _copy.deepcopy(data)
-    lineage_data["diagnostics"] = _diagnostics_summary(diagnostics_full)
-    diagnostics_data = {"schema_version": "1.0", **diagnostics_full}
-    validate_lineage_document(lineage_data)
-    from .validation import validate_diagnostics_document
-
-    validate_diagnostics_document(diagnostics_data)
-    with open(output_dir / "lineage.json", "w", encoding="utf-8") as stream:
-        json.dump(
-            lineage_data,
-            stream,
-            ensure_ascii=False,
-            indent=None if compact else 2,
-            separators=(",", ":") if compact else None,
-            default=str,
-        )
-    with open(output_dir / "diagnostics.json", "w", encoding="utf-8") as stream:
-        json.dump(
-            diagnostics_data,
-            stream,
-            ensure_ascii=False,
-            indent=None if compact else 2,
-            separators=(",", ":") if compact else None,
-            default=str,
-        )
-    return output_dir
 
 def _result_to_dict(r: ScopeLineageResult) -> dict:
     d = {

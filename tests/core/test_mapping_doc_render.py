@@ -8,7 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from scope_lineage.contract import to_lineage_dict, write_lineage
+from scope_lineage.contract import to_lineage_dict
+
+from .statement_document import write_statement_documents
 from scope_lineage.render.mapping_markdown import (
     DOC_FORMAT,
     FIELD_ID_SPAN_PATTERN,
@@ -69,7 +71,7 @@ def _document(sql: str, task_id: str = "case_task", schema=None) -> dict:
 
 def _documents_with_diagnostics(sql: str, tmp_path: Path, schema=None) -> tuple[dict, dict]:
     result = parse_scope_lineage(sql, "case_task", schema=schema)
-    write_lineage(result, tmp_path / "artifacts")
+    write_statement_documents(result, tmp_path / "artifacts")
     lineage = json.loads((tmp_path / "artifacts" / "lineage.json").read_text(encoding="utf-8"))
     diagnostics = json.loads(
         (tmp_path / "artifacts" / "diagnostics.json").read_text(encoding="utf-8")
@@ -608,7 +610,7 @@ def test_sections_filter_drops_unlisted_sections() -> None:
 
 def _write_artifacts(sql: str, out_dir: Path, schema=None) -> Path:
     result = parse_scope_lineage(sql, out_dir.name, schema=schema)
-    write_lineage(result, out_dir)
+    write_statement_documents(result, out_dir)
     return out_dir
 
 
