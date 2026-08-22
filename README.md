@@ -232,7 +232,7 @@ python -m pip install .
 ```
 
 The PyPI distribution and CLI are named `scope-lineage`; the Python import namespace is
-`scope_lineage`. The current `0.1.x` series is Alpha. See the
+`scope_lineage`. The current `0.2.x` series is Alpha. See the
 [Chinese installation and usage guide](docs/zh-CN/getting-started.md) for a self-contained tutorial.
 
 ## Quick start

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0
 - **Breaking**: the task contract (2.0) is now the only output mode, and the standalone
   contract-1.0 artifact is removed in the same release -- the planned deprecation window
   collapsed when the sole downstream consumer confirmed its own retirement.

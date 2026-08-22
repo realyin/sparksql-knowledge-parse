@@ -221,7 +221,7 @@ python -m pip install .
 ```
 
 PyPI distribution 和 CLI 名均为 `scope-lineage`，Python import namespace 为
-`scope_lineage`。当前 `0.1.x` 系列处于 Alpha 阶段。首次使用请阅读
+`scope_lineage`。当前 `0.2.x` 系列处于 Alpha 阶段。首次使用请阅读
 [安装与使用指南](docs/zh-CN/getting-started.md)。
 
 ## 快速开始
