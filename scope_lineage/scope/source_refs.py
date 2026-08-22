@@ -1,6 +1,9 @@
 """SourceRef construction, conversion, dedupe, and resolution normalization."""
 from __future__ import annotations
 
+from typing import cast
+
+from .fact_protocols import ExpressionResolution
 from .scope_types import (
     AMBIGUOUS_SCOPE_ID,
     CONSTANT_SCOPE_ID,
@@ -144,7 +147,7 @@ def _generated_sources_from_refs(refs: list[SourceRef], transform: str | None = 
 
 
 def _source_kind_for_resolution(
-    physical_fields: list[dict[str, str]],
+    physical_fields: list[dict],
     generated_sources: list[dict[str, str]],
     rowset_sources: list[dict[str, str]] | None = None,
     *,
@@ -172,12 +175,12 @@ def _source_kind_for_resolution(
 
 
 def _normalize_expression_resolution(
-    resolution: dict[str, object],
+    resolution: "ExpressionResolution",
     *,
     scope_id: str | None = None,
     field: str | None = None,
     expression: str | None = None,
-) -> dict[str, object]:
+) -> "ExpressionResolution":
     physical_fields = [
         dict(item)
         for item in resolution.get("physical_source_fields") or []
@@ -255,10 +258,10 @@ def _normalize_expression_resolution(
         normalized["candidate_source_refs"] = list(resolution.get("candidate_source_refs") or [])
     if resolution.get("scope_output_trace"):
         normalized["scope_output_trace"] = list(resolution.get("scope_output_trace") or [])
-    return normalized
+    return cast(ExpressionResolution, normalized)
 
 
-def _dedupe_generated_source_dicts(sources: list[dict[str, str]]) -> list[dict[str, str]]:
+def _dedupe_generated_source_dicts(sources: list[dict]) -> list[dict]:
     deduped: list[dict[str, str]] = []
     seen: set[tuple[str, str, str]] = set()
     for item in sources:
@@ -275,7 +278,7 @@ def _dedupe_generated_source_dicts(sources: list[dict[str, str]]) -> list[dict[s
     return deduped
 
 
-def _dedupe_rowset_source_dicts(sources: list[dict[str, str]]) -> list[dict[str, str]]:
+def _dedupe_rowset_source_dicts(sources: list[dict]) -> list[dict]:
     deduped: list[dict[str, str]] = []
     seen: set[tuple[str, str, str, str]] = set()
     for item in sources:
@@ -348,7 +351,7 @@ def _physical_source_fields_for_ref(
     ref: SourceRef,
     *,
     seen: set[tuple[str, str]] | None = None,
-) -> list[dict[str, str]]:
+) -> list[dict]:
     if not ref.scope or ref.scope in NON_PHYSICAL_SOURCE_SCOPES:
         return []
     if not _is_internal_scope_id(ref.scope):
@@ -395,7 +398,7 @@ def _qualified_physical_field_sql(table: str, field: str) -> str:
     return f"`{table}`.`{field}`"
 
 
-def _dedupe_physical_field_dicts(fields: list[dict[str, str]]) -> list[dict[str, str]]:
+def _dedupe_physical_field_dicts(fields: list[dict]) -> list[dict]:
     deduped: list[dict[str, str]] = []
     seen: set[tuple[str, str]] = set()
     for item in fields:

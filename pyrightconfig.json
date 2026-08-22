@@ -1,0 +1,17 @@
+{
+  "include": [
+    "scope_lineage/scope/fact_protocols.py",
+    "scope_lineage/scope/scope_types.py",
+    "scope_lineage/scope/source_refs.py",
+    "scope_lineage/scope/sequences.py",
+    "scope_lineage/scope/_constants.py",
+    "scope_lineage/scope/expression_text.py",
+    "scope_lineage/scope/expression_refs.py",
+    "scope_lineage/scope/function_catalog.py",
+    "scope_lineage/scope/expansion_budget.py"
+  ],
+  "pythonVersion": "3.9",
+  "typeCheckingMode": "basic",
+  "reportMissingImports": false,
+  "reportPrivateImportUsage": false
+}

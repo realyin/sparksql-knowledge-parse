@@ -8,6 +8,8 @@ instead of physical table names.
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
+from .fact_protocols import ExpressionResolution
+
 
 CONSTANT_SCOPE_ID = "CONSTANT"
 SYSTEM_SCOPE_ID = "SYSTEM"
@@ -162,7 +164,7 @@ class ScopeOutputField:
     # Which references were left unexpanded, as {scope_id, field, ref} — follow them to the
     # named scope's output to continue the expansion by hand.
     unexpanded_refs: List[dict] = field(default_factory=list)
-    expression_resolution: Dict[str, object] = field(default_factory=dict)
+    expression_resolution: ExpressionResolution = field(default_factory=lambda: ExpressionResolution())
     expression_type: Optional[str] = None
     expression_features: Dict[str, object] = field(default_factory=dict)
     expression_role: Optional[str] = None

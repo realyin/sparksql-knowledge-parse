@@ -5,11 +5,13 @@ extracted from _shared.py) can depend on these without creating a cycle.
 """
 from __future__ import annotations
 
+from typing import Any, Dict
+
 from sqlglot import ErrorLevel
 
 DIALECT = "spark"
 
-PARSE_OPTS = {"error_level": ErrorLevel.IGNORE}
+PARSE_OPTS: Dict[str, Any] = {"error_level": ErrorLevel.IGNORE}
 
 _SCOPE_ID_ATTR = "_lineage_scope_id"
 _ORIGINALLY_UNQUALIFIED_META = "lineage_originally_unqualified"
