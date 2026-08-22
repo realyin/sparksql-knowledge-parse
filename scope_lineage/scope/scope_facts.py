@@ -40,11 +40,12 @@ from .passthrough_resolution import _propagate_passthrough_expression_resolution
 from .logic_block import _populate_logic_blocks  # noqa: F401
 
 
-# The front resolution segment used to be hand-unrolled (P I O, P I O, P I). Replacing it
-# with full rounds run to a fixed point was verified equivalent on the whole golden corpus
-# and the sqlglot compat matrix; the tail segment after the refresh passes is NOT a loop --
-# see the comment there. Floor of 3 keeps at least the unrolled coverage even if the
-# fingerprint ever misses a mutated field; ceiling per the governance plan (WI-09).
+# Both resolution segments used to be hand-unrolled (P I O, P I O, P I before the detail
+# refreshes; P I, P I, P O after). Full rounds run to a fixed point were verified
+# byte-identical on the whole golden corpus across the sqlglot compat matrix -- the tail
+# unification only became safe once the internal pass turned idempotent on settled
+# outputs. Floor of 3 keeps at least the unrolled coverage even if the fingerprint ever
+# misses a mutated field; ceiling per the governance plan (WI-09).
 _RESOLUTION_MIN_ROUNDS = 3
 _RESOLUTION_MAX_ROUNDS = 6
 
@@ -66,7 +67,7 @@ def _resolution_fingerprint(result: ScopeLineageResult) -> int:
     ))
 
 
-def _run_front_resolution_rounds(result: ScopeLineageResult) -> None:
+def _run_resolution_rounds(result: ScopeLineageResult) -> None:
     fingerprint = _resolution_fingerprint(result)
     for round_index in range(_RESOLUTION_MAX_ROUNDS):
         _propagate_passthrough_expression_resolution(result)
@@ -93,8 +94,30 @@ def _populate_enhanced_scope_facts(
     all_scopes: list[Scope],
     schema: dict | None = None,
 ) -> None:
-    """Populate additional per-scope facts for refactor-oriented analysis."""
+    """Populate additional per-scope facts for refactor-oriented analysis.
 
+    Four phases, each a named function below. A new pass joins one of the phases -- the
+    wiring guard test red-flags any pass function defined but not reachable from here.
+    """
+    _populate_structural_facts(result, all_scopes, schema)
+    _run_resolution_rounds(result)
+    _refresh_detail_resolutions(result)
+    # A second convergence segment, not a repeat by accident: the refresh passes above
+    # rewrite aggregate/window resolutions, and the rounds must settle again afterwards.
+    # Safe as a loop only since the internal pass became idempotent on settled outputs
+    # (see _should_rebuild_internal_expansion_from_expression).
+    _run_resolution_rounds(result)
+    _finalize_facts(result, schema)
+
+
+def _populate_structural_facts(
+    result: ScopeLineageResult,
+    all_scopes: list[Scope],
+    schema: dict | None,
+) -> None:
+    """Phase 1 -- structure. Writes scope raw_sql, input_edges, logic_blocks, bindings,
+    union_branch_alignment, outputs, field_usage, and final target columns. No
+    expression_resolution content yet."""
     for sg_scope in all_scopes:
         scope_id = getattr(sg_scope, _SCOPE_ID_ATTR, None)
         if not scope_id or scope_id not in result.scopes:
@@ -113,16 +136,21 @@ def _populate_enhanced_scope_facts(
     _populate_scope_outputs(result)
     _populate_scope_field_usage(result, schema)
     _populate_final_targets(result)
-    _run_front_resolution_rounds(result)
+
+
+def _refresh_detail_resolutions(result: ScopeLineageResult) -> None:
+    """Phase 3 -- detail refresh. Rewrites aggregate and window outputs'
+    expression_resolution with their detail facts; runs once between the two
+    convergence segments."""
     _refresh_aggregation_detail_expression_resolution(result)
     _refresh_window_detail_expression_resolution(result)
     _refresh_window_output_expression_resolutions(result)
-    _propagate_passthrough_expression_resolution(result)
-    _resolve_internal_scope_expression_resolution(result)
-    _propagate_passthrough_expression_resolution(result)
-    _resolve_internal_scope_expression_resolution(result)
-    _propagate_passthrough_expression_resolution(result)
-    _resolve_expression_resolution_from_output_sources(result)
+
+
+def _finalize_facts(result: ScopeLineageResult, schema: dict | None) -> None:
+    """Phase 5 -- settlement. Reads the settled resolutions to finish reintroduced
+    references, build union branch mappings and provenance traces, derive mapping
+    chains, fact gaps, and logic-block features; prunes star warnings."""
     # Runs after the expansion passes have settled: it can only finish references those
     # passes reintroduced, so there is nothing to do until they stop changing the text.
     _finish_reintroduced_expansions(result)
