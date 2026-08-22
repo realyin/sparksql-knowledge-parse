@@ -130,7 +130,12 @@ warning 不是固定封闭枚举；机器处理应对已知类型设策略，对
 
 ## 4.5 先看 `metadata_coverage`，再看 `lineage_fact_gaps`
 
-**这是读本文档的必要顺序，不是建议。**
+> **本节只适用于契约 2.0。** v1 的 `diagnostics.json` 只有 `schema_version`、`warnings`、`stats`
+> 和（存在缺口时的）`lineage_fact_gaps`，**没有** `metadata_coverage` 与 `analysis_status`——
+> 在 v1 产物里找这两个键会一无所获。v1 下判断"缺口是不是元数据造成的"，读 `lineage.json` 的
+> `related_metadata.input_tables[*].metadata_complete`。
+
+**这是读 2.0 诊断文档的必要顺序，不是建议。**
 
 字段级缺口不区分原因：工具解析不了某种 SQL、和这次运行根本没拿到源表的列，产出的记录**长得一模一样**
 （`missing_reasons: ["no_physical_source_fields"]`）。按缺口数排优先级时，第二种会把第一种彻底淹没。

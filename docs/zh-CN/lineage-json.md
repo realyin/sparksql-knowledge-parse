@@ -4,6 +4,8 @@
 `--contract-version 2.0` 时，文件改为任务级有序状态契约，字段定义见
 [Task Lineage 2.0](task-lineage-v2.md)，权威 Schema 为
 `scope_lineage/schemas/lineage-v2.schema.json`。
+不确定自己的场景该用哪份契约，先读[按业务场景选契约](contract-selection.md)：
+字段血缘、加工步骤分析用本契约即可；涉及语句顺序、DELETE/TRUNCATE、最终表状态才需要 2.0。
 
 ## 1. 它到底输出什么
 
@@ -82,14 +84,16 @@ GROUP BY c.customer_id;
 | Key | Value 类型 | 必填 | 含义与使用方式 |
 | --- | --- | --- | --- |
 | `schema_version` | string | 是 | 本文所述默认契约固定为 `1.0`。消费者先检查 major 版本。 |
-| `task_id` | string | 是 | 本条写表语句的任务标识；批量输入和多语句任务可能基于输入名生成独立标识。 |
+| `task_id` | string | 是 | 本条写表语句的任务标识；批量输入和多语句任务可能基于输入名生成独立标识。**不要用它关联 v1 与 v2 产物**：多写入脚本下 v1 按写入序号加后缀（`task#0`、`task#1`），v2 按脚本位置（`task#1`、`task#3`），同一个 `task#1` 在两份产物里指向不同语句。关联键是下面的 `statement_id`。 |
+| `statement_id` | string | 条件输出 | 脚本位置形式 `stmt:NNN`（如 `stmt:002`），与 v2 `statement_sequence[].statement_id` **对同一条语句取值相同**——这是 v1 与 v2 产物之间**唯一被指定的关联键**。经脚本文本解析（CLI、`parse_all_scope_lineage`、`parse_scope_lineage` 传 SQL）时输出；调用方直接传入已解析 AST（`tree=`）时不输出——那时脚本位置不可知，猜一个会静默匹配到错误的语句。 |
+| `statement_index` | integer | 条件输出 | 零基脚本位置，计入脚本中**全部**语句（含 SET、DELETE 等未建模语句），与 v2 `statement_sequence[].statement_index` 同口径。与 `statement_id` 同出现、同缺席。 |
 | `target_table` | string | 是 | SQL 实际写入的目标，如 `mart.customer_summary`。`INSERT OVERWRITE DIRECTORY` 写的是文件路径而不是表，此时取值形如 `directory:/warehouse/export/daily`，带 `directory:` 前缀。**消费者登记仓库表时应先排除这类取值**；这类语句的血缘照常产出，且因为目标不是表，`target_field_binding` 不会出现。 |
 | `stmt_kind` | enum string | 是 | `INSERT_OVERWRITE`、`INSERT`、`CTAS`、`MERGE` 或 `UNKNOWN`。注意字段名不是 `statement_type`。 |
 | `is_session_scoped_relation` | boolean | 否 | 仅在为 `true` 时出现。该语句产出的关系只存活于会话、不落存储：`TEMP VIEW`、`GLOBAL TEMP VIEW`、`CACHE [LAZY] TABLE` 都属此列。**消费者不应据此登记仓库中新增了一张表**，统计表级覆盖时也应先排除。判据取自 AST 事实而非命名模式：不带 `TEMPORARY` 的 `CREATE VIEW` 会注册进 catalog 并跨会话存活，因此**不**带此标记。`is_cached_relation` 是本字段在 CACHE 语法上的既有子集，含义不变。 |
 | `parse_status` | enum string | 是 | `ok` 表示形成了可校验 Lineage 文档；`failed` 表示解析失败，不能消费正常血缘。 |
 | `syntax_status` | enum string | 是 | `strict_ok`、`recovered` 或 `failed`。`recovered` 表示解析器经过恢复，必须同时读诊断。 |
 | `syntax_errors` | array<object> | 是 | 语法错误或恢复证据。元素可含 `description`、`line`、`col` 和上下文片段。 |
-| `skipped_statements` | array<object> | 条件输出 | v1 未作为投影写入建模的顶层语句。包含稳定的 `statement_id`、零基 `statement_index`、`statement_kind`、`category`、`model_status`、`reason`、`normalized_sql` 和支持范围说明；行变更应改用 v2 建模。**`category` 为 `control_statement`（如 `SET`）或 `empty_statement` 的语句是设计上忽略的，只记录、不再发 `unsupported_statement` 告警**——要知道被忽略了什么，读本字段（它只出现在 `lineage.json`，不在 `diagnostics.json` 里）。 |
+| `skipped_statements` | array<object> | 条件输出 | v1 未作为投影写入建模的顶层语句。包含稳定的 `statement_id`、零基 `statement_index`、`statement_kind`、`category`、`model_status`、`reason`、`normalized_sql` 和支持范围说明；行变更应改用 v2 建模。**`category` 为 `control_statement`（如 `SET`）或 `empty_statement` 的语句是设计上忽略的，只记录、不再发 `unsupported_statement` 告警**——要知道被忽略了什么，读本字段（它只出现在 `lineage.json`，不在 `diagnostics.json` 里）。<br>单语句 API `parse_scope_lineage` 只建模脚本中的**第一条**写表语句：之后的写语句以 `category: additional_write_statement`、`model_status: not_modeled` 记录在此（附 `target_table`），并发一条 `additional_write_statements_not_modeled` 告警列出未建模的目标。这些语句本身是受支持的——要全部建模，用 `parse_all_scope_lineage`（CLI 即此口径）或契约 2.0。 |
 | `target_partition_spec` | object | 是 | 分区名到分区值的映射。动态分区的 value 可以为 `null`。 |
 | `target_partition_columns` | array<string> | 是 | 目标表分区列名。 |
 | `target_partition_mode` | enum string | 是 | `none`、`static`、`dynamic` 或 `mixed`，描述的是 **`PARTITION(...)` 子句的写法**：给了值是 `static`、没给值是 `dynamic`、没有该子句是 `none`。**它与会话配置 `spark.sql.sources.partitionOverwriteMode` 无关**，也不表示这次覆写会删掉多少数据——两者名字相近但含义不同。覆写的实际影响范围由 v2 的 `effect.rowset_effect` 表达，见 task-lineage-v2.md。 |

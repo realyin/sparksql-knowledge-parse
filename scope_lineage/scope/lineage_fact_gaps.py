@@ -48,9 +48,52 @@ def _populate_lineage_fact_gaps(result: ScopeLineageResult) -> None:
                     gap = _lineage_gap_from_expression_resolution(result=result, scope_data=scope_data, scope_id=scope_id, object_type=f'aggregation_detail.{item_key}', object_name=str(item.get('output_field') or item.get('expression_sql') or ''), expression_sql=str(item.get('expression_sql') or ''), expression_resolution=item.get('expression_resolution') or {}, evidence_path=f'lineage.scopes.{scope_id}.logic_blocks[{block_index}].aggregation_detail.{item_key}[{item_index}]', output_fields=[str(item.get('output_field'))] if item.get('output_field') else [], target_columns=[])
                     if gap:
                         gaps.append(gap)
+    gaps.extend(_unexpanded_star_gaps(result))
     for (index, gap) in enumerate(gaps, start=1):
         gap['gap_id'] = f'lineage_gap:{index:04d}'
     result.diagnostics.lineage_fact_gaps = gaps
+
+
+def _unexpanded_star_gaps(result: ScopeLineageResult) -> list[dict[str, object]]:
+    """A `*` that reached the target unexpanded is a root-impact gap, not just a warning.
+
+    "Source table has no schema, so the star never expanded" is the most common shape of
+    lost lineage, yet it produced only a `star_not_expanded` warning here while the task
+    contract records a root-impact `projection_wildcard_unexpanded` gap — so the same SQL
+    passed `--fail-on-root-gap` and strict gates under contract 1.0 and failed them under
+    2.0 (STARGAP-001). Same gap type as v2 on purpose: one condition, one name.
+
+    Only ROOT outputs are considered: a star in a CTE that a later projection resolves is
+    not a fact anyone lost, and when it *does* stay unresolved it surfaces on ROOT too.
+    """
+    root = result.scopes.get('ROOT')
+    if root is None:
+        return []
+    gaps: list[dict[str, object]] = []
+    for (index, output) in enumerate(root.outputs):
+        stayed_star = output.name == '*' or (
+            output.transform == 'EXPAND_ALL'
+            and any(source.column == '*' for source in output.sources)
+        )
+        if not stayed_star:
+            continue
+        gaps.append({
+            'gap_type': 'projection_wildcard_unexpanded',
+            'gap_bucket': 'wildcard_projection',
+            'scope_id': 'ROOT',
+            'object_type': 'output',
+            'object_name': output.name,
+            'expression_sql': output.expression,
+            'needed_fact': 'source schema for wildcard expansion',
+            'root_impact': True,
+            'owner_hint': 'metadata_provider',
+            'evidence_path': f'lineage.scopes.ROOT.outputs[{index}]',
+            'downstream_impact': {
+                'output_fields': [output.name] if output.name else [],
+                'target_columns': output.final_target_columns or output.target_columns,
+            },
+        })
+    return gaps
 
 
 def _mark_gaps_from_recovered_syntax(result: ScopeLineageResult) -> None:

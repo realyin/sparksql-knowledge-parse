@@ -360,22 +360,24 @@ def test_overview_lists_physical_table_pairs_with_short_keys() -> None:
     assert "dwd.order_detail.customer_id" not in row
 
 
-REPEATED_SELF_JOIN_SQL = """
+# Non-equi ON: genuinely unsplittable into key pairs, so the degraded rendering path
+# stays exercised now that equality self-joins resolve properly (JOINALIAS-001).
+REPEATED_DEGRADED_JOIN_SQL = """
 INSERT INTO mart.agents
 WITH a1 AS (
-  SELECT x.guid FROM ods.user_df x LEFT JOIN ods.user_df y ON x.leader = y.guid
+  SELECT x.guid FROM ods.user_df x LEFT JOIN ods.user_df y ON x.leader > y.guid
 ),
 a2 AS (
-  SELECT x.guid FROM ods.user_df x LEFT JOIN ods.user_df y ON x.leader = y.guid
+  SELECT x.guid FROM ods.user_df x LEFT JOIN ods.user_df y ON x.leader > y.guid
 )
 SELECT a1.guid FROM a1 JOIN a2 ON a1.guid = a2.guid
 """
 
-REPEATED_SELF_JOIN_SCHEMA = {"ods.user_df": ["guid", "leader"]}
+REPEATED_DEGRADED_JOIN_SCHEMA = {"ods.user_df": ["guid", "leader"]}
 
 
-def test_identical_degraded_self_joins_merge_into_one_counted_row() -> None:
-    document = _document(REPEATED_SELF_JOIN_SQL, schema=REPEATED_SELF_JOIN_SCHEMA)
+def test_identical_degraded_joins_merge_into_one_counted_row() -> None:
+    document = _document(REPEATED_DEGRADED_JOIN_SQL, schema=REPEATED_DEGRADED_JOIN_SCHEMA)
     rendered = render_mapping_markdown(document)
     overview = rendered.split("## 3.")[1].split("## 4.")[0]
 
@@ -388,8 +390,24 @@ def test_identical_degraded_self_joins_merge_into_one_counted_row() -> None:
     assert "2 处" in degraded_rows[0]
 
 
-def test_self_join_degrades_with_warning_and_neutral_label() -> None:
+def test_equality_self_join_renders_key_pairs_not_the_degraded_label() -> None:
+    # Pinned the degraded rendering while the core collapsed self-join aliases; the core
+    # now keeps the sides apart (JOINALIAS-001), so this input renders as a normal join.
     document = _document(SELF_JOIN_SQL, schema=SELF_JOIN_SCHEMA)
+    rendered = render_mapping_markdown(document)
+
+    assert "连接条件（未拆分）" not in rendered
+    assert "parent_id = id" in rendered
+
+
+def test_a_non_equi_join_degrades_with_warning_and_neutral_label() -> None:
+    document = _document(
+        SELF_JOIN_SQL.replace(
+            "ON a.parent_id = b.id AND a.batch_id = b.batch_id",
+            "ON a.batch_id > b.batch_id",
+        ),
+        schema=SELF_JOIN_SCHEMA,
+    )
     rendered = render_mapping_markdown(document)
 
     assert "⚠" in rendered
@@ -511,7 +529,10 @@ def test_gaps_section_keeps_conclusions_and_defers_warnings_to_sibling_doc(
     # warning bodies leave the mapping document; only a counted pointer remains
     assert "star_not_expanded" not in rendered
     assert "warnings.md" in rendered
-    assert "缺口：无" in rendered
+    # the unexpanded star is a fact gap now (STARGAP-001), so the gaps section reports
+    # it as a conclusion instead of claiming there is none
+    assert "缺口：无" not in rendered
+    assert "projection_wildcard_unexpanded" in rendered
 
 
 def test_warnings_doc_groups_by_type_with_chinese_gloss(tmp_path: Path) -> None:

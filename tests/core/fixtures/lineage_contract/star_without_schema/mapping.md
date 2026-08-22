@@ -67,5 +67,5 @@ flowchart LR
 ## 9. 不确定性与缺口
 
 - ⚠ 追溯不完整字段：*
-- 缺口：无（diagnostics 未记录 lineage_fact_gaps）
+- ⚠ 缺口：evidence_path=lineage.scopes.ROOT.outputs[0]；expression_sql=*；gap_bucket=wildcard_projection；gap_id=lineage_gap:0001；gap_type=projection_wildcard_unexpanded；needed_fact=source schema for wildcard expansion；object_name=*；object_type=output；owner_hint=metadata_provider；root_impact=True；scope_id=ROOT
 - 解析警告：1 条（提示类信息，见同目录 warnings.md）

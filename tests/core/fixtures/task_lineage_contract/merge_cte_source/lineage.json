@@ -81,6 +81,8 @@
     "stmt:001": {
       "schema_version": "1.0",
       "task_id": "golden_merge_cte_source#0",
+      "statement_id": "stmt:001",
+      "statement_index": 0,
       "target_table": "mart.event_target",
       "stmt_kind": "MERGE",
       "parse_status": "ok",

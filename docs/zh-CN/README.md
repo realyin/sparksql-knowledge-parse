@@ -11,10 +11,11 @@ Scope Lineage 把 Spark/Hive SQL 转换成两类机器可消费的事实：
 2. [安装与使用指南](getting-started.md)：完成安装、第一次解析，并了解常用 CLI 和 Python API；
 3. [Scope Lineage：把复杂 SQL 还原成可验证的字段加工链](value-and-use-cases.md)：通过完整案例了解加工血缘、可验证血缘和实际使用价值；
 4. [输入格式](input-formats.md)：了解 SQL、任务 JSON、Schema 和目标表元数据怎么传入；
-5. [`lineage.json` 输出契约](lineage-json.md)：逐层理解顶层字段、scope、逻辑块、字段映射链和端到端血缘；
-6. [`diagnostics.json` 输出契约](diagnostics-json.md)：理解 warning、事实缺口以及什么结果不能当成已证明事实。
-7. [Task Lineage 2.0](task-lineage-v2.md)：理解 DELETE/TRUNCATE/UPDATE、行集合影响和多语句最终表状态。
-8. [mapping.md 字段映射文档](mapping-doc.md)：用 `scope-lineage render` 把契约渲染成对人和机器都可读的映射文档。
+5. [v1 还是 v2？按业务场景选契约](contract-selection.md)：字段血缘、加工步骤分析用默认 1.0；审计、事故排查、最终表状态用 2.0——先选对契约再读细节；
+6. [`lineage.json` 输出契约](lineage-json.md)：逐层理解顶层字段、scope、逻辑块、字段映射链和端到端血缘；
+7. [`diagnostics.json` 输出契约](diagnostics-json.md)：理解 warning、事实缺口以及什么结果不能当成已证明事实。
+8. [Task Lineage 2.0](task-lineage-v2.md)：理解 DELETE/TRUNCATE/UPDATE、行集合影响和多语句最终表状态。
+9. [mapping.md 字段映射文档](mapping-doc.md)：用 `scope-lineage render` 把契约渲染成对人和机器都可读的映射文档。
 
 ## 从问题找到字段
 

@@ -1,6 +1,8 @@
 {
   "schema_version": "1.0",
   "task_id": "merge_contract",
+  "statement_id": "stmt:001",
+  "statement_index": 0,
   "target_table": "mart.customer_profile",
   "stmt_kind": "MERGE",
   "parse_status": "ok",

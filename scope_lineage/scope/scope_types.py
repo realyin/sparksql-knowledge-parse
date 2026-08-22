@@ -309,6 +309,15 @@ class ScopeLineageResult:
     # {statement_kind, reason, supported}. Empty for the common single-statement case. Present
     # so a skipped statement cannot be mistaken for one that was never there (CONTRACT-001).
     skipped_statements: List[dict] = field(default_factory=list)
+    # Script-position identity, shared with the v2 task contract: statement_index is the
+    # zero-based position among ALL statements of the script, statement_id its stable
+    # `stmt:NNN` form. v1 numbers artifacts by write ordinal (`task#0`, `task#1`) while v2
+    # numbers by script position, so `task#1` named different statements in the two
+    # contracts and nothing serialized related them (JOINKEY-001). None when the caller
+    # handed over a pre-parsed tree: the script position is unknown there, and a guessed
+    # key would silently match the wrong statement — the exact failure this field removes.
+    statement_id: Optional[str] = None
+    statement_index: Optional[int] = None
     target_partition_spec: Dict[str, Optional[str]] = field(default_factory=dict)
     target_partition_columns: List[str] = field(default_factory=list)
     target_partition_mode: str = "none"  # none|static|dynamic|mixed

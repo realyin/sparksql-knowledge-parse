@@ -1,6 +1,8 @@
 {
   "schema_version": "1.0",
   "task_id": "golden_star_without_schema",
+  "statement_id": "stmt:001",
+  "statement_index": 0,
   "target_table": "mart.raw_copy",
   "stmt_kind": "INSERT",
   "parse_status": "ok",
@@ -378,9 +380,33 @@
     "warning_types": {
       "star_not_expanded": 1
     },
-    "lineage_fact_gap_count": 0,
-    "lineage_fact_gap_types": {},
-    "lineage_fact_gap_samples": [],
+    "lineage_fact_gap_count": 1,
+    "lineage_fact_gap_types": {
+      "projection_wildcard_unexpanded": 1
+    },
+    "lineage_fact_gap_samples": [
+      {
+        "gap_type": "projection_wildcard_unexpanded",
+        "gap_bucket": "wildcard_projection",
+        "scope_id": "ROOT",
+        "object_type": "output",
+        "object_name": "*",
+        "expression_sql": "*",
+        "needed_fact": "source schema for wildcard expansion",
+        "root_impact": true,
+        "owner_hint": "metadata_provider",
+        "evidence_path": "lineage.scopes.ROOT.outputs[0]",
+        "downstream_impact": {
+          "output_fields": [
+            "*"
+          ],
+          "target_columns": [
+            "mart.raw_copy.*"
+          ]
+        },
+        "gap_id": "lineage_gap:0001"
+      }
+    ],
     "stats": {
       "scope_count": 2,
       "physical_table_count": 1,

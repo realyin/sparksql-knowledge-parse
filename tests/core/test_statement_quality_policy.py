@@ -22,7 +22,7 @@ def _mixed_script(path: Path) -> None:
 
 
 def test_skipped_statements_have_stable_task_level_identity_and_category() -> None:
-    writes, skipped, _regex_flags = _collect_insert_trees(
+    writes, skipped, _regex_flags, _write_indices = _collect_insert_trees(
         """
         SET spark.sql.shuffle.partitions = 8;
         DELETE FROM mart.target WHERE expired = true;

@@ -1,0 +1,8 @@
+{
+  "task_id": "golden_multi_statement_script",
+  "sql": "SET spark.sql.shuffle.partitions = 8;\nDELETE FROM mart.audit WHERE expired = true;\nINSERT INTO mart.first_target SELECT id, v FROM ods.source;\nINSERT INTO mart.second_target SELECT id FROM ods.other_source",
+  "schema": {
+    "ods.source": ["id", "v"],
+    "ods.other_source": ["id"]
+  }
+}

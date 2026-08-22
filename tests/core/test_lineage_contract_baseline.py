@@ -88,6 +88,7 @@ def test_baseline_covers_the_required_contract_shapes() -> None:
         "self_join",
         "fact_gap",
         "special_literals",
+        "multi_statement_script",
     }
 
 

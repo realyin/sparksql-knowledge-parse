@@ -484,12 +484,27 @@ def _join_relation_detail(
         for edge in input_edges
         if edge.source_id and edge.alias
     }
+    left_alias = alias_by_source.get(join.left_scope)
+    right_alias = alias_by_source.get(join.right_scope) or join.alias_in_parent
+    if join.left_scope == join.right_scope:
+        # Self-join: one source_id, two sides — the dict above collapsed both onto the
+        # later alias (left_alias == right_alias, JOINALIAS-001). Edge order still holds
+        # each side's alias: the FROM-positioned edge entered first, the joined side after.
+        aliases = [
+            edge.alias
+            for edge in input_edges
+            if edge.source_id == join.left_scope and edge.alias
+        ]
+        if len(aliases) >= 2:
+            right_alias = join.alias_in_parent or aliases[-1]
+            left_candidates = [alias for alias in aliases if alias != right_alias]
+            left_alias = left_candidates[0] if left_candidates else aliases[0]
     detail: dict[str, object] = {
         "join_type": join.join_type,
         "left_input": join.left_scope,
         "right_input": join.right_scope,
-        "left_alias": alias_by_source.get(join.left_scope),
-        "right_alias": alias_by_source.get(join.right_scope) or join.alias_in_parent,
+        "left_alias": left_alias,
+        "right_alias": right_alias,
         "condition_expression": join.condition_expression,
         "condition_fields": [_source_ref_to_dict(ref) for ref in join.condition_columns],
         "join_key_pairs": [],
@@ -524,7 +539,14 @@ def _join_relation_detail(
 
     for conjunct in _split_conjuncts(root_expr):
         refs = _resolve_column_refs_in_expr(conjunct, sg_scope, result, schema)
-        key_pair = _join_key_pair_from_expr(conjunct, refs, join.left_scope, join.right_scope)
+        key_pair = _join_key_pair_from_expr(
+            conjunct,
+            refs,
+            join.left_scope,
+            join.right_scope,
+            left_alias=left_alias,
+            right_alias=right_alias,
+        )
         if key_pair is not None:
             detail["join_key_pairs"].append(key_pair)
         elif refs:
@@ -717,13 +739,32 @@ def _join_key_pair_from_expr(
     refs: list[SourceRef],
     left_input: str,
     right_input: str,
+    *,
+    left_alias: str | None = None,
+    right_alias: str | None = None,
 ) -> dict[str, object] | None:
     if not isinstance(expr, exp.EQ) or len(refs) != 2:
         return None
     left_ref = refs[0]
     right_ref = refs[1]
     if left_ref.scope == right_ref.scope:
-        return None
+        # Same scope on both sides is a self-join key, not a non-key, when the two refs
+        # carry the two sides' distinct qualifiers. Refusing it sent every self-join
+        # equality into condition_filters, where the expanded rendering collapsed
+        # `a.batch_id = b.batch_id` into a tautology on one table (JOINALIAS-001).
+        # Orientation comes from the qualifiers; anything less than an exact two-sided
+        # match stays refused rather than guessed.
+        left_qualifier = left_ref.qualifier
+        right_qualifier = right_ref.qualifier
+        if (
+            not left_alias
+            or not right_alias
+            or {left_qualifier, right_qualifier} != {left_alias, right_alias}
+        ):
+            return None
+        if left_qualifier == right_alias:
+            left_ref, right_ref = right_ref, left_ref
+        return _join_key_pair_dict(expr, left_ref, right_ref)
     if right_ref.scope == right_input:
         pass
     elif left_ref.scope == right_input:
@@ -733,6 +774,14 @@ def _join_key_pair_from_expr(
             left_ref, right_ref = right_ref, left_ref
     else:
         return None
+    return _join_key_pair_dict(expr, left_ref, right_ref)
+
+
+def _join_key_pair_dict(
+    expr: exp.Expression,
+    left_ref: SourceRef,
+    right_ref: SourceRef,
+) -> dict[str, object]:
     return {
         "left": _source_ref_to_dict(left_ref),
         "right": _source_ref_to_dict(right_ref),

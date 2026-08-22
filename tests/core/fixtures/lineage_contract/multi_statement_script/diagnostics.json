@@ -1,0 +1,28 @@
+{
+  "schema_version": "1.0",
+  "warnings": [
+    {
+      "type": "unsupported_statement",
+      "scope": "ROOT",
+      "msg": "DELETE 语句未解析(not_a_table_write_from_select);支持的写表语句: INSERT / INSERT OVERWRITE / CTAS / MERGE"
+    },
+    {
+      "type": "additional_write_statements_not_modeled",
+      "scope": "ROOT",
+      "msg": "parse_scope_lineage 只建模脚本中的第一条写表语句;以下写入未被本文档建模: mart.second_target。需要全部写入请使用 parse_all_scope_lineage(契约 1.0)或 parse_task_lineage(契约 2.0)"
+    }
+  ],
+  "stats": {
+    "scope_count": 2,
+    "physical_table_count": 1,
+    "cte_count": 0,
+    "subquery_count": 0,
+    "union_count": 0,
+    "union_branch_count": 0,
+    "max_depth": 1,
+    "case_when_count": 0,
+    "window_function_count": 0,
+    "join_count": 0,
+    "aggregate_function_count": 0
+  }
+}

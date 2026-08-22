@@ -1,34 +1,50 @@
 {
   "schema_version": "1.0",
-  "task_id": "golden_target_ddl_binding",
-  "statement_id": "stmt:001",
-  "statement_index": 0,
-  "target_table": "dwd.account_daily",
-  "stmt_kind": "INSERT_OVERWRITE",
+  "task_id": "golden_multi_statement_script",
+  "statement_id": "stmt:003",
+  "statement_index": 2,
+  "target_table": "mart.first_target",
+  "stmt_kind": "INSERT",
   "parse_status": "ok",
   "syntax_status": "strict_ok",
   "syntax_errors": [],
-  "target_partition_spec": {
-    "dt": "20260801"
-  },
-  "target_partition_columns": [
-    "dt"
+  "skipped_statements": [
+    {
+      "statement_id": "stmt:001",
+      "normalized_sql": "SET spark.sql.shuffle.partitions = 8",
+      "statement_index": 0,
+      "statement_kind": "SET",
+      "category": "control_statement",
+      "model_status": "ignored",
+      "reason": "not_a_table_write_from_select",
+      "supported": "INSERT / INSERT OVERWRITE / CTAS / MERGE"
+    },
+    {
+      "statement_id": "stmt:002",
+      "normalized_sql": "DELETE FROM mart.audit WHERE expired = TRUE",
+      "statement_index": 1,
+      "statement_kind": "DELETE",
+      "category": "row_mutation",
+      "model_status": "unsupported",
+      "reason": "not_a_table_write_from_select",
+      "supported": "INSERT / INSERT OVERWRITE / CTAS / MERGE"
+    },
+    {
+      "statement_id": "stmt:004",
+      "normalized_sql": "INSERT INTO mart.second_target SELECT id FROM ods.other_source",
+      "statement_index": 3,
+      "statement_kind": "INSERT",
+      "category": "additional_write_statement",
+      "model_status": "not_modeled",
+      "reason": "beyond_first_write_statement",
+      "supported": "INSERT / INSERT OVERWRITE / CTAS / MERGE",
+      "target_table": "mart.second_target"
+    }
   ],
-  "target_partition_mode": "static",
-  "target_field_binding": {
-    "status": "applied",
-    "method": "ddl_position",
-    "metadata_table": "dwd.account_daily",
-    "metadata_source_file": "synthetic-target-metadata.json",
-    "projection_count": 2,
-    "target_column_count": 2,
-    "corrected_column_count": 2,
-    "static_partition_columns": [
-      "dt"
-    ],
-    "dynamic_partition_columns": [],
-    "issues": []
-  },
+  "target_partition_spec": {},
+  "target_partition_columns": [],
+  "target_partition_mode": "none",
+  "target_binding_absent_reason": "metadata_not_provided",
   "task_dependencies": {
     "upstream_tasks": [],
     "downstream_tasks": [],
@@ -40,19 +56,19 @@
     }
   },
   "source_tables": [
-    "ods.account_snapshot"
+    "ods.source"
   ],
   "related_metadata": {
     "input_tables": {
-      "ods.account_snapshot": {
+      "ods.source": {
         "column_details": [
           {
-            "name": "account_key",
+            "name": "id",
             "type": null,
             "comment": null
           },
           {
-            "name": "balance_value",
+            "name": "v",
             "type": null,
             "comment": null
           }
@@ -61,15 +77,15 @@
       }
     },
     "output_tables": {
-      "dwd.account_daily": {
+      "mart.first_target": {
         "column_details": [
           {
-            "name": "account_id",
+            "name": "id",
             "type": null,
             "comment": null
           },
           {
-            "name": "balance",
+            "name": "v",
             "type": null,
             "comment": null
           }
@@ -81,11 +97,11 @@
   "scope_graph": {
     "nodes": [
       "ROOT",
-      "ods.account_snapshot"
+      "ods.source"
     ],
     "edges": [
       {
-        "from": "ods.account_snapshot",
+        "from": "ods.source",
         "to": "ROOT"
       }
     ]
@@ -95,10 +111,10 @@
       "kind": "root",
       "role": "pass_through",
       "depends_on": [
-        "ods.account_snapshot"
+        "ods.source"
       ],
-      "writes_to": "dwd.account_daily",
-      "raw_sql": "SELECT `s`.`account_key` AS `wrong_key`, `s`.`balance_value` AS `wrong_balance` FROM `ods`.`account_snapshot` AS `s`",
+      "writes_to": "mart.first_target",
+      "raw_sql": "SELECT `source`.`id` AS `id`, `source`.`v` AS `v` FROM `ods`.`source` AS `source`",
       "raw_sql_available": true,
       "raw_sql_quality": {
         "status": "clean",
@@ -108,41 +124,41 @@
       "source_coverage": {
         "status": "covered",
         "declared_source_tables": [
-          "ods.account_snapshot"
+          "ods.source"
         ],
         "raw_sql_source_tables": [
-          "ods.account_snapshot"
+          "ods.source"
         ],
         "missing_declared_source_tables": [],
         "extra_source_tables": []
       },
       "input_edges": [
         {
-          "source_id": "ods.account_snapshot",
+          "source_id": "ods.source",
           "source_type": "physical_table",
           "position": "from",
-          "alias": "s"
+          "alias": "source"
         }
       ],
       "input_source_refs": [
         {
           "input_ref_id": "input:ROOT:001",
-          "source_id": "ods.account_snapshot",
+          "source_id": "ods.source",
           "source_type": "physical_table",
-          "alias": "s",
+          "alias": "source",
           "position": "from",
           "relation_position": "from",
           "join_type": null,
-          "physical_source_id": "ods.account_snapshot",
+          "physical_source_id": "ods.source",
           "physical_source_ids": [
-            "ods.account_snapshot"
+            "ods.source"
           ],
           "source_resolution": {
             "status": "resolved",
             "resolution_type": "direct_physical_source",
             "cardinality": "single_source",
             "physical_source_tables": [
-              "ods.account_snapshot"
+              "ods.source"
             ],
             "field_resolution_required": false,
             "missing_reasons": []
@@ -151,8 +167,8 @@
           "binding_status": "resolved",
           "binding_trace": [
             {
-              "from": "s",
-              "to": "ods.account_snapshot",
+              "from": "source",
+              "to": "ods.source",
               "relation": "alias_to_physical_source"
             }
           ],
@@ -161,12 +177,12 @@
       ],
       "alias_source_bindings": [
         {
-          "alias": "s",
-          "source_id": "ods.account_snapshot",
+          "alias": "source",
+          "source_id": "ods.source",
           "source_type": "physical_table",
-          "physical_source_id": "ods.account_snapshot",
+          "physical_source_id": "ods.source",
           "physical_source_ids": [
-            "ods.account_snapshot"
+            "ods.source"
           ],
           "position": "from",
           "relation_position": "from",
@@ -176,7 +192,7 @@
             "resolution_type": "direct_physical_source",
             "cardinality": "single_source",
             "physical_source_tables": [
-              "ods.account_snapshot"
+              "ods.source"
             ],
             "field_resolution_required": false,
             "missing_reasons": []
@@ -185,8 +201,8 @@
           "binding_status": "resolved",
           "binding_trace": [
             {
-              "from": "s",
-              "to": "ods.account_snapshot",
+              "from": "source",
+              "to": "ods.source",
               "relation": "alias_to_physical_source"
             }
           ],
@@ -195,13 +211,13 @@
       ],
       "outputs": [
         {
-          "name": "account_id",
+          "name": "id",
           "transform": "DIRECT",
           "sources": [
             {
-              "scope": "ods.account_snapshot",
-              "column": "account_key",
-              "qualifier": "s",
+              "scope": "ods.source",
+              "column": "id",
+              "qualifier": "source",
               "binding_scope_id": "ROOT",
               "input_ref_id": "input:ROOT:001"
             }
@@ -209,40 +225,40 @@
           "source_logic_blocks": [],
           "downstream_fields": [],
           "target_columns": [
-            "dwd.account_daily.account_id"
+            "mart.first_target.id"
           ],
           "final_target_columns": [
-            "dwd.account_daily.account_id"
+            "mart.first_target.id"
           ],
-          "expression": "`s`.`account_key`",
-          "expanded_expression": "`ods.account_snapshot`.`account_key`",
+          "expression": "`source`.`id`",
+          "expanded_expression": "`ods.source`.`id`",
           "expression_resolution": {
             "status": "resolved",
             "resolution_type": "qualified_source_projection",
             "physical_source_fields": [
               {
-                "table": "ods.account_snapshot",
-                "field": "account_key"
+                "table": "ods.source",
+                "field": "id"
               }
             ],
             "generated_sources": [],
             "source_kind": "physical",
             "missing_reasons": [],
-            "expanded_expression": "`ods.account_snapshot`.`account_key`",
+            "expanded_expression": "`ods.source`.`id`",
             "scope_output_trace": [
               {
                 "step": 1,
                 "from_scope_id": "ROOT",
-                "from_field": "account_id",
+                "from_field": "id",
                 "to_scope_id": null,
                 "to_field": null,
                 "relation": "physical_expression",
-                "expression_sql": "`s`.`account_key`",
+                "expression_sql": "`source`.`id`",
                 "resolution_status": "resolved",
                 "physical_source_fields": [
                   {
-                    "table": "ods.account_snapshot",
-                    "field": "account_key"
+                    "table": "ods.source",
+                    "field": "id"
                   }
                 ]
               }
@@ -268,16 +284,16 @@
           "expression_role": "direct_projection",
           "grain_effect": "preserved",
           "output_ordinal": 0,
-          "display_expression": "`account_key`"
+          "display_expression": "`id`"
         },
         {
-          "name": "balance",
+          "name": "v",
           "transform": "DIRECT",
           "sources": [
             {
-              "scope": "ods.account_snapshot",
-              "column": "balance_value",
-              "qualifier": "s",
+              "scope": "ods.source",
+              "column": "v",
+              "qualifier": "source",
               "binding_scope_id": "ROOT",
               "input_ref_id": "input:ROOT:001"
             }
@@ -285,40 +301,40 @@
           "source_logic_blocks": [],
           "downstream_fields": [],
           "target_columns": [
-            "dwd.account_daily.balance"
+            "mart.first_target.v"
           ],
           "final_target_columns": [
-            "dwd.account_daily.balance"
+            "mart.first_target.v"
           ],
-          "expression": "`s`.`balance_value`",
-          "expanded_expression": "`ods.account_snapshot`.`balance_value`",
+          "expression": "`source`.`v`",
+          "expanded_expression": "`ods.source`.`v`",
           "expression_resolution": {
             "status": "resolved",
             "resolution_type": "qualified_source_projection",
             "physical_source_fields": [
               {
-                "table": "ods.account_snapshot",
-                "field": "balance_value"
+                "table": "ods.source",
+                "field": "v"
               }
             ],
             "generated_sources": [],
             "source_kind": "physical",
             "missing_reasons": [],
-            "expanded_expression": "`ods.account_snapshot`.`balance_value`",
+            "expanded_expression": "`ods.source`.`v`",
             "scope_output_trace": [
               {
                 "step": 1,
                 "from_scope_id": "ROOT",
-                "from_field": "balance",
+                "from_field": "v",
                 "to_scope_id": null,
                 "to_field": null,
                 "relation": "physical_expression",
-                "expression_sql": "`s`.`balance_value`",
+                "expression_sql": "`source`.`v`",
                 "resolution_status": "resolved",
                 "physical_source_fields": [
                   {
-                    "table": "ods.account_snapshot",
-                    "field": "balance_value"
+                    "table": "ods.source",
+                    "field": "v"
                   }
                 ]
               }
@@ -344,77 +360,67 @@
           "expression_role": "direct_projection",
           "grain_effect": "preserved",
           "output_ordinal": 1,
-          "display_expression": "`balance_value`"
+          "display_expression": "`v`"
         }
       ],
       "field_usage": [
         {
-          "source_id": "ods.account_snapshot",
+          "source_id": "ods.source",
           "source_type": "physical_table",
           "used_fields": [
-            "account_key",
-            "balance_value"
+            "id",
+            "v"
           ],
           "used_field_details": [
             {
-              "name": "account_key",
+              "name": "id",
               "type": null,
               "comment": null
             },
             {
-              "name": "balance_value",
+              "name": "v",
               "type": null,
               "comment": null
             }
           ],
           "used_by_logic_blocks": [],
           "used_by_output_fields": [
-            "account_id",
-            "balance"
+            "id",
+            "v"
           ],
           "source_metadata": {}
         }
       ],
       "columns": [
         {
-          "name": "account_id",
+          "name": "id",
           "transform": "DIRECT",
-          "expression": "`s`.`account_key`",
+          "expression": "`source`.`id`",
           "sources": [
             {
-              "scope": "ods.account_snapshot",
-              "column": "account_key",
-              "qualifier": "s",
+              "scope": "ods.source",
+              "column": "id",
+              "qualifier": "source",
               "binding_scope_id": "ROOT",
               "input_ref_id": "input:ROOT:001"
             }
           ],
-          "parsed_name": "wrong_key",
-          "target_column_ordinal": 0,
-          "target_field_resolution": "ddl_position",
-          "target_field_corrected": true,
-          "target_metadata_table": "dwd.account_daily",
-          "display_expression": "`account_key`"
+          "display_expression": "`id`"
         },
         {
-          "name": "balance",
+          "name": "v",
           "transform": "DIRECT",
-          "expression": "`s`.`balance_value`",
+          "expression": "`source`.`v`",
           "sources": [
             {
-              "scope": "ods.account_snapshot",
-              "column": "balance_value",
-              "qualifier": "s",
+              "scope": "ods.source",
+              "column": "v",
+              "qualifier": "source",
               "binding_scope_id": "ROOT",
               "input_ref_id": "input:ROOT:001"
             }
           ],
-          "parsed_name": "wrong_balance",
-          "target_column_ordinal": 1,
-          "target_field_resolution": "ddl_position",
-          "target_field_corrected": true,
-          "target_metadata_table": "dwd.account_daily",
-          "display_expression": "`balance_value`"
+          "display_expression": "`v`"
         }
       ]
     }
@@ -422,18 +428,18 @@
   "field_mapping_chains": [
     {
       "mapping_chain_id": "mc:001",
-      "chain_id": "chain:ROOT:account_id:position:0",
+      "chain_id": "chain:ROOT:id:position:0",
       "chain_type": "field_mapping",
       "target_scope_id": "ROOT",
-      "target_field": "account_id",
+      "target_field": "id",
       "target_position": 0,
       "chain_status": "resolved",
       "source_kind": "physical",
       "root_source_fields": [
-        "ods.account_snapshot.account_key"
+        "ods.source.id"
       ],
       "final_output_fields": [
-        "dwd.account_daily.account_id"
+        "mart.first_target.id"
       ],
       "ordered_steps": [
         {
@@ -441,18 +447,18 @@
           "scope_id": "ROOT",
           "step_type": "direct_projection",
           "input_fields": [
-            "ods.account_snapshot.account_key"
+            "ods.source.id"
           ],
-          "output_field": "dwd.account_daily.account_id",
-          "expression_sql": "`s`.`account_key`",
-          "expanded_expression": "`ods.account_snapshot`.`account_key`",
+          "output_field": "mart.first_target.id",
+          "expression_sql": "`source`.`id`",
+          "expanded_expression": "`ods.source`.`id`",
           "expression_resolution": {
             "status": "resolved",
             "resolution_type": "qualified_source_projection",
             "physical_source_fields": [
               {
-                "table": "ods.account_snapshot",
-                "field": "account_key"
+                "table": "ods.source",
+                "field": "id"
               }
             ],
             "generated_sources": [],
@@ -462,16 +468,16 @@
               {
                 "step": 1,
                 "from_scope_id": "ROOT",
-                "from_field": "account_id",
+                "from_field": "id",
                 "to_scope_id": null,
                 "to_field": null,
                 "relation": "physical_expression",
-                "expression_sql": "`s`.`account_key`",
+                "expression_sql": "`source`.`id`",
                 "resolution_status": "resolved",
                 "physical_source_fields": [
                   {
-                    "table": "ods.account_snapshot",
-                    "field": "account_key"
+                    "table": "ods.source",
+                    "field": "id"
                   }
                 ]
               }
@@ -482,29 +488,29 @@
           "transform": "DIRECT",
           "grain_effect": "preserved",
           "final_output_fields": [
-            "dwd.account_daily.account_id"
+            "mart.first_target.id"
           ],
           "target_position": 0
         }
       ],
-      "expanded_expression": "`ods.account_snapshot`.`account_key`",
+      "expanded_expression": "`ods.source`.`id`",
       "missing_reasons": [],
       "trace_status": "complete"
     },
     {
       "mapping_chain_id": "mc:002",
-      "chain_id": "chain:ROOT:balance:position:1",
+      "chain_id": "chain:ROOT:v:position:1",
       "chain_type": "field_mapping",
       "target_scope_id": "ROOT",
-      "target_field": "balance",
+      "target_field": "v",
       "target_position": 1,
       "chain_status": "resolved",
       "source_kind": "physical",
       "root_source_fields": [
-        "ods.account_snapshot.balance_value"
+        "ods.source.v"
       ],
       "final_output_fields": [
-        "dwd.account_daily.balance"
+        "mart.first_target.v"
       ],
       "ordered_steps": [
         {
@@ -512,18 +518,18 @@
           "scope_id": "ROOT",
           "step_type": "direct_projection",
           "input_fields": [
-            "ods.account_snapshot.balance_value"
+            "ods.source.v"
           ],
-          "output_field": "dwd.account_daily.balance",
-          "expression_sql": "`s`.`balance_value`",
-          "expanded_expression": "`ods.account_snapshot`.`balance_value`",
+          "output_field": "mart.first_target.v",
+          "expression_sql": "`source`.`v`",
+          "expanded_expression": "`ods.source`.`v`",
           "expression_resolution": {
             "status": "resolved",
             "resolution_type": "qualified_source_projection",
             "physical_source_fields": [
               {
-                "table": "ods.account_snapshot",
-                "field": "balance_value"
+                "table": "ods.source",
+                "field": "v"
               }
             ],
             "generated_sources": [],
@@ -533,16 +539,16 @@
               {
                 "step": 1,
                 "from_scope_id": "ROOT",
-                "from_field": "balance",
+                "from_field": "v",
                 "to_scope_id": null,
                 "to_field": null,
                 "relation": "physical_expression",
-                "expression_sql": "`s`.`balance_value`",
+                "expression_sql": "`source`.`v`",
                 "resolution_status": "resolved",
                 "physical_source_fields": [
                   {
-                    "table": "ods.account_snapshot",
-                    "field": "balance_value"
+                    "table": "ods.source",
+                    "field": "v"
                   }
                 ]
               }
@@ -553,12 +559,12 @@
           "transform": "DIRECT",
           "grain_effect": "preserved",
           "final_output_fields": [
-            "dwd.account_daily.balance"
+            "mart.first_target.v"
           ],
           "target_position": 1
         }
       ],
-      "expanded_expression": "`ods.account_snapshot`.`balance_value`",
+      "expanded_expression": "`ods.source`.`v`",
       "missing_reasons": [],
       "trace_status": "complete"
     }
@@ -572,17 +578,17 @@
         "kind": "root",
         "role": "pass_through",
         "operations": [
-          "rename"
+          "pass_through"
         ],
-        "business_summary": "读取 ods.account_snapshot",
+        "business_summary": "读取 ods.source",
         "direct_inputs": [
-          "ods.account_snapshot"
+          "ods.source"
         ],
         "direct_source_tables": [
-          "ods.account_snapshot"
+          "ods.source"
         ],
         "physical_source_tables": [
-          "ods.account_snapshot"
+          "ods.source"
         ],
         "output_columns": 2,
         "logic": {
@@ -591,16 +597,7 @@
           "aggregations": [],
           "window_functions": [],
           "case_when": [],
-          "key_renames": [
-            {
-              "from": "account_key",
-              "to": "account_id"
-            },
-            {
-              "from": "balance_value",
-              "to": "balance"
-            }
-          ],
+          "key_renames": [],
           "distinct": false,
           "union_branches": 0,
           "lateral_views": []
@@ -610,52 +607,45 @@
   },
   "end_to_end_lineage": [
     {
-      "column": "account_id",
+      "column": "id",
       "transform": "DIRECT",
-      "expression": "`s`.`account_key`",
+      "expression": "`source`.`id`",
       "trace_complete": true,
       "physical_sources": [
         {
-          "table": "ods.account_snapshot",
-          "column": "account_key",
+          "table": "ods.source",
+          "column": "id",
           "transform": "DIRECT"
         }
       ],
       "generated_sources": [],
       "source_kind": "physical",
-      "output_ordinal": 0,
-      "parsed_column": "wrong_key",
-      "target_column_ordinal": 0,
-      "target_field_resolution": "ddl_position",
-      "target_field_corrected": true,
-      "target_metadata_table": "dwd.account_daily"
+      "output_ordinal": 0
     },
     {
-      "column": "balance",
+      "column": "v",
       "transform": "DIRECT",
-      "expression": "`s`.`balance_value`",
+      "expression": "`source`.`v`",
       "trace_complete": true,
       "physical_sources": [
         {
-          "table": "ods.account_snapshot",
-          "column": "balance_value",
+          "table": "ods.source",
+          "column": "v",
           "transform": "DIRECT"
         }
       ],
       "generated_sources": [],
       "source_kind": "physical",
-      "output_ordinal": 1,
-      "parsed_column": "wrong_balance",
-      "target_column_ordinal": 1,
-      "target_field_resolution": "ddl_position",
-      "target_field_corrected": true,
-      "target_metadata_table": "dwd.account_daily"
+      "output_ordinal": 1
     }
   ],
   "diagnostics": {
     "fallback_used": false,
-    "warning_count": 0,
-    "warning_types": {},
+    "warning_count": 2,
+    "warning_types": {
+      "unsupported_statement": 1,
+      "additional_write_statements_not_modeled": 1
+    },
     "lineage_fact_gap_count": 0,
     "lineage_fact_gap_types": {},
     "lineage_fact_gap_samples": [],

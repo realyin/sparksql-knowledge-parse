@@ -33,6 +33,16 @@
       "type": "string",
       "minLength": 1
     },
+    "statement_id": {
+      "type": "string",
+      "pattern": "^stmt:[0-9]{3,}$",
+      "description": "Script-position identity shared with the v2 task contract; the designated join key between v1 and v2 artifacts of the same script. Absent when parsing started from a caller-supplied tree."
+    },
+    "statement_index": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Zero-based position among ALL statements of the script (matches v2 statement_sequence[].statement_index)."
+    },
     "target_table": {
       "type": "string",
       "minLength": 1
@@ -130,13 +140,15 @@
               "row_mutation",
               "control_statement",
               "empty_statement",
-              "unsupported_statement"
+              "unsupported_statement",
+              "additional_write_statement"
             ]
           },
           "model_status": {
             "enum": [
               "ignored",
-              "unsupported"
+              "unsupported",
+              "not_modeled"
             ]
           },
           "reason": {
@@ -144,6 +156,10 @@
           },
           "supported": {
             "type": "string"
+          },
+          "target_table": {
+            "type": "string",
+            "description": "Only on category=additional_write_statement: the write target this document did not model."
           }
         }
       }

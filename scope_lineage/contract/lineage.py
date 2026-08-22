@@ -129,6 +129,17 @@ def _result_to_dict(r: ScopeLineageResult) -> dict:
     d = {
         "schema_version": "1.0",
         "task_id": r.task_id,
+        # The designated join key to the v2 task contract: `statement_id` matches
+        # `statement_sequence[].statement_id` for the same statement, `statement_index` is
+        # the zero-based script position. `task_id` cannot serve — v1 suffixes it by write
+        # ordinal, v2 by script position, so identical task_ids name different statements
+        # (JOINKEY-001). Absent when parsing started from a caller-supplied tree, where the
+        # script position is unknown.
+        **(
+            {"statement_id": r.statement_id, "statement_index": r.statement_index}
+            if r.statement_id is not None
+            else {}
+        ),
         "target_table": r.target_table,
         "stmt_kind": r.stmt_kind,
         # Optional, present only when true: a CACHE ... AS SELECT builds its relation from

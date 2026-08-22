@@ -19,5 +19,28 @@
     "window_function_count": 0,
     "join_count": 0,
     "aggregate_function_count": 0
-  }
+  },
+  "lineage_fact_gaps": [
+    {
+      "gap_type": "projection_wildcard_unexpanded",
+      "gap_bucket": "wildcard_projection",
+      "scope_id": "ROOT",
+      "object_type": "output",
+      "object_name": "*",
+      "expression_sql": "*",
+      "needed_fact": "source schema for wildcard expansion",
+      "root_impact": true,
+      "owner_hint": "metadata_provider",
+      "evidence_path": "lineage.scopes.ROOT.outputs[0]",
+      "downstream_impact": {
+        "output_fields": [
+          "*"
+        ],
+        "target_columns": [
+          "mart.raw_copy.*"
+        ]
+      },
+      "gap_id": "lineage_gap:0001"
+    }
+  ]
 }

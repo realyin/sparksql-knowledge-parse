@@ -72,16 +72,16 @@ def test_v1_now_accounts_for_the_same_positions_v2_does():
 
 # --- guards: the other empty shape, and everything else, must not move ---------------
 
-def test_a_bare_semicolon_after_a_comment_is_still_recorded_as_semicolon():
-    # The two shapes stay distinguishable: this one is exp.Semicolon and keeps its own
-    # kind, matching what v2 calls it. Collapsing both into one name would lose the
-    # distinction rather than complete it.
+def test_a_comment_bearing_semicolon_is_recorded_as_comment():
+    # The two shapes stay distinguishable: the exp.Semicolon here carries `-- note`, so
+    # its record holds that comment as normalized_sql — calling it SEMICOLON made kind
+    # and content contradict each other (COMMENT-001). The trailing bare position stays
+    # EMPTY; both records keep the empty_statement category, matching v2.
     entries = _skipped(f"{WRITE};\n-- note\n;")
-    # This shape yields [Insert, Semicolon, None]: the comment's semicolon and a trailing
-    # empty position. Both are recorded and they keep separate kinds -- exactly what v2
-    # publishes for the same text.
+    # This shape yields [Insert, Semicolon, None]: the comment-bearing semicolon and a
+    # trailing empty position. Both are recorded, with kinds naming what each holds.
     assert [(e["statement_index"], e["statement_kind"]) for e in entries] == [
-        (1, "SEMICOLON"),
+        (1, "COMMENT"),
         (2, "EMPTY"),
     ]
 

@@ -26,7 +26,7 @@ stmt_kind: "INSERT"
 
 | 左表 | 关系 | 右表 | 连接键 | 出现 |
 | --- | --- | --- | --- | --- |
-| ods.nodes | INNER JOIN | ods.nodes | ⚠ 未拆分 | 1 处 |
+| ods.nodes | INNER JOIN | ods.nodes | parent_id = id | 1 处 |
 
 ## 4. 字段映射总表
 
@@ -59,10 +59,8 @@ stmt_kind: "INSERT"
 - 输入：ods.nodes；物理上游：ods.nodes
 - 逻辑：join 1、filter 0、聚合 0、窗口 0、union 分支 0、distinct 否
 - INNER JOIN：`ods.nodes` ⋈ `ods.nodes`（@ ROOT；logic_block_id=logic:ROOT:join:001）
-  - ON：`` `a`.`parent_id` = `b`.`id` AND `a`.`batch_id` = `b`.`batch_id` ``
-  - ⚠ missing_join_key_pairs：等值键与过滤条件未能区分（自连接、ON TRUE 等场景），以下按原文列出
-  - 连接条件（未拆分）：`` `a`.`parent_id` = `b`.`id` ``
-  - 连接条件（未拆分）：`` `a`.`batch_id` = `b`.`batch_id` ``
+  - 等值键：a.parent_id = b.id（物理：`ods.nodes.parent_id = ods.nodes.id`）
+  - 等值键：batch_id
 
 ## 7. scope 结构图
 

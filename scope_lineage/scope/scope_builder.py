@@ -84,6 +84,12 @@ def _statement_kind_label(tree) -> str:
     for node_type, label in ((exp.Update, "UPDATE"), (exp.Delete, "DELETE")):
         if isinstance(tree, node_type):
             return label
+    if isinstance(tree, exp.Semicolon) and tree.comments:
+        # A trailing `-- done` parses as a Semicolon carrying the comment, so the record
+        # called itself an empty statement while its normalized_sql held `/* done */` —
+        # kind and content contradicted each other (COMMENT-001). Same empty_statement
+        # category: the position still holds nothing executable.
+        return "COMMENT"
     return type(tree).__name__.upper()
 
 
@@ -92,12 +98,12 @@ def _statement_category(statement_kind: str) -> str:
         return "row_mutation"
     if statement_kind in {"SET", "USE"}:
         return "control_statement"
-    if statement_kind == "SEMICOLON":
+    if statement_kind in {"SEMICOLON", "COMMENT"}:
         return "empty_statement"
     return "unsupported_statement"
 
 
-def _collect_insert_trees(sql: str) -> tuple[list, list[dict]]:
+def _collect_insert_trees(sql: str) -> tuple[list, list[dict], list[bool], list[int]]:
     """Top-level write statements, plus a record of every statement skipped.
 
     A multi-statement script can mix a write with statements this tool does not model. Those
@@ -110,8 +116,10 @@ def _collect_insert_trees(sql: str) -> tuple[list, list[dict]]:
     trees = sqlglot.parse(sql, dialect=DIALECT, **PARSE_OPTS)
     write_trees, skipped = [], []
     # A SET applies from where it appears onward, so the flag is folded in statement order
-    # and recorded per write: write_trees is flat and carries no script position.
+    # and recorded per write: write_trees is flat, so each write's script position is
+    # carried alongside in write_indices.
     regex_flags: list[bool] = []
+    write_indices: list[int] = []
     regex_columns_enabled = DEFAULT_QUOTED_REGEX_COLUMN_NAMES
     for statement_index, tree in enumerate(trees):
         if tree is None:
@@ -141,6 +149,7 @@ def _collect_insert_trees(sql: str) -> tuple[list, list[dict]]:
         ):
             write_trees.append(tree)
             regex_flags.append(regex_columns_enabled)
+            write_indices.append(statement_index)
             continue
         statement_kind = _statement_kind_label(tree)
         category = _statement_category(statement_kind)
@@ -161,7 +170,7 @@ def _collect_insert_trees(sql: str) -> tuple[list, list[dict]]:
             "reason": "not_a_table_write_from_select",
             "supported": SUPPORTED_STATEMENTS,
         })
-    return write_trees, skipped, regex_flags
+    return write_trees, skipped, regex_flags, write_indices
 
 
 def _normalize_directory_insert_sql(sql: str) -> str:
@@ -351,13 +360,36 @@ def parse_scope_lineage(
     # document expand a regex projection the statement document declined, from one SET
     # (SESSION-001). None means "not told"; only then do we fold from `sql` ourselves.
     enabled = True if regex_columns_enabled is None else regex_columns_enabled
+    script_records: list[dict] = []
+    script_position: int | None = None
     if tree is None:
-        insert_trees, skipped_statements, single_flags = _collect_insert_trees(sql)
+        insert_trees, skipped_statements, single_flags, write_indices = (
+            _collect_insert_trees(sql)
+        )
         if not insert_trees:
             raise NoSupportedWriteStatementError(skipped_statements)
-        # For now, handle the first INSERT/MERGE only (multi-statement later)
+        # This entry point models the first INSERT/MERGE only. That boundary used to be
+        # applied silently: a two-write script came back as the first write's document with
+        # no warning and no record — undeclared data loss on a public API (SINGLE-001).
+        # The writes beyond the first are recorded below so the loss is declared, and
+        # `parse_all_scope_lineage` is the entry that models them.
         tree = insert_trees[0]
         enabled = single_flags[0] if single_flags else DEFAULT_QUOTED_REGEX_COLUMN_NAMES
+        script_position = write_indices[0]
+        script_records = list(skipped_statements)
+        for position, extra in zip(write_indices[1:], insert_trees[1:]):
+            script_records.append({
+                "statement_id": f"stmt:{position + 1:03d}",
+                "normalized_sql": render_sql_or_none(extra) or "",
+                "statement_index": position,
+                "statement_kind": _statement_kind_label(extra),
+                "category": "additional_write_statement",
+                "model_status": "not_modeled",
+                "reason": "beyond_first_write_statement",
+                "supported": SUPPORTED_STATEMENTS,
+                "target_table": _target_table_name_for_error_result(extra),
+            })
+        script_records.sort(key=lambda item: item["statement_index"])
     statement_identity_sql = render_sql_or_none(tree) or ""
 
     if _is_ctas(tree):
@@ -407,7 +439,47 @@ def parse_scope_lineage(
     result.syntax_status, result.syntax_errors = _syntax_status(sql)
     _mark_gaps_from_recovered_syntax(result)
     result.statement_identity_sql = statement_identity_sql
+    if script_position is not None:
+        result.statement_index = script_position
+        result.statement_id = f"stmt:{script_position + 1:03d}"
+    if script_records:
+        _declare_skipped_statements(result, script_records)
     return result
+
+
+def _declare_skipped_statements(result: ScopeLineageResult, records: list[dict]) -> None:
+    """Attach the script's non-modeled statements and warn where a consumer must act.
+
+    Control and empty statements are ignored by design: recorded, never warned (their
+    "unsupported" warnings were the largest warning source in a run while telling a consumer
+    nothing to act on). Writes beyond the first are supported statements this entry did not
+    model, so they get their own warning naming the lost targets instead of a misleading
+    "unsupported" one.
+    """
+    result.skipped_statements = list(records)
+    dropped_writes = []
+    for item in records:
+        if item["category"] == "additional_write_statement":
+            dropped_writes.append(item.get("target_table") or item["normalized_sql"])
+            continue
+        if item["category"] in {"control_statement", "empty_statement"}:
+            continue
+        result.diagnostics.warnings.append(DiagnosticWarning(
+            type="unsupported_statement",
+            scope="ROOT",
+            msg=f"{item['statement_kind']} 语句未解析({item['reason']});"
+                f"支持的写表语句: {item['supported']}",
+        ))
+    if dropped_writes:
+        result.diagnostics.warnings.append(DiagnosticWarning(
+            type="additional_write_statements_not_modeled",
+            scope="ROOT",
+            msg=(
+                "parse_scope_lineage 只建模脚本中的第一条写表语句;"
+                f"以下写入未被本文档建模: {', '.join(dropped_writes)}。"
+                "需要全部写入请使用 parse_all_scope_lineage(契约 1.0)或 parse_task_lineage(契约 2.0)"
+            ),
+        ))
 
 
 def parse_all_scope_lineage(
@@ -418,7 +490,9 @@ def parse_all_scope_lineage(
 ) -> list[ScopeLineageResult]:
     """Parse all INSERT/MERGE statements; return one ScopeLineageResult per target."""
     schema = _prepare_schema(schema)
-    insert_trees, skipped_statements, regex_flags = _collect_insert_trees(sql)
+    insert_trees, skipped_statements, regex_flags, write_indices = (
+        _collect_insert_trees(sql)
+    )
     if not insert_trees:
         raise NoSupportedWriteStatementError(skipped_statements)
 
@@ -479,6 +553,8 @@ def parse_all_scope_lineage(
             )
             results.append(result)
         results[-1].statement_identity_sql = statement_identity_sql
+        results[-1].statement_index = write_indices[i]
+        results[-1].statement_id = f"stmt:{write_indices[i] + 1:03d}"
         script_local_schema(schema, script_local, results[-1])
     for result in results:
         result.syntax_status = syntax_status
@@ -487,22 +563,8 @@ def parse_all_scope_lineage(
         # A skipped statement must remain visible on every artifact this script produced: a
         # consumer cannot otherwise tell one INSERT from one INSERT plus three DELETEs, and
         # "not modeled" would look the same as "not present" (CONTRACT-001).
-        result.skipped_statements = list(skipped_statements)
-        for item in skipped_statements:
-            if item["category"] in {"control_statement", "empty_statement"}:
-                # Ignored by design, and already recorded above with that category and its
-                # SQL. Calling it "unsupported" made config and empty statements the
-                # largest source of warnings in a run while telling a consumer nothing to
-                # act on, and contradicted the task document, which marks the same
-                # statements "ignored" (task_lineage.py). The record stays; the misnomer
-                # goes.
-                continue
-            result.diagnostics.warnings.append(DiagnosticWarning(
-                type="unsupported_statement",
-                scope="ROOT",
-                msg=f"{item['statement_kind']} 语句未解析({item['reason']});"
-                    f"支持的写表语句: {item['supported']}",
-            ))
+        if skipped_statements:
+            _declare_skipped_statements(result, skipped_statements)
     return results
 
 

@@ -1,6 +1,8 @@
 {
   "schema_version": "1.0",
   "task_id": "golden_special_literals",
+  "statement_id": "stmt:001",
+  "statement_index": 0,
   "target_table": "mart.flags",
   "stmt_kind": "INSERT",
   "parse_status": "ok",

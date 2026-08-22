@@ -68,6 +68,12 @@ def write_task_lineage(
         full = _canonical_diagnostics(statement.get("diagnostics") or {})
         statement_diagnostics[statement_id] = full
         statement["diagnostics"] = _diagnostics_summary(full)
+        # The v2 schema types statement_lineage values as bare objects, so the outer
+        # validation below never looks inside them. Each nested document claims the v1
+        # contract; hold it to that here, in the exact form it is about to be published
+        # (i.e. with its diagnostics already summarized), or a drifted nested document
+        # ships without complaint (NESTEDVAL-001).
+        validate_lineage_document(statement)
     lineage_data["diagnostics"] = _diagnostics_summary(diagnostics_full)
     diagnostics_data = {
         "schema_version": "2.0",

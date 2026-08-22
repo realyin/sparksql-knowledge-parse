@@ -295,6 +295,8 @@ scope-lineage parse \
 ~~~
 
 详见 [Task Lineage 2.0](docs/zh-CN/task-lineage-v2.md)。
+不确定场景该用哪份契约，见[按业务场景选契约](docs/zh-CN/contract-selection.md)：
+字段血缘、加工步骤分析用默认 1.0；审计、事故排查、最终表状态用 2.0。
 
 ### 从已移除的契约 1.0 迁移
 

@@ -1,6 +1,8 @@
 {
   "schema_version": "1.0",
   "task_id": "golden_self_join",
+  "statement_id": "stmt:001",
+  "statement_index": 0,
   "target_table": "mart.node_edges",
   "stmt_kind": "INSERT",
   "parse_status": "ok",
@@ -343,7 +345,7 @@
           ],
           "unresolved_qualifiers": [],
           "binding_status": "complete",
-          "evidence_path": "logic_blocks.logic:ROOT:join:001.join_relation_detail.condition_filters"
+          "evidence_path": "logic_blocks.logic:ROOT:join:001.join_relation_detail.join_key_pairs"
         },
         {
           "expression_sql": "`a`.`batch_id` = `b`.`batch_id`",
@@ -368,7 +370,7 @@
           ],
           "unresolved_qualifiers": [],
           "binding_status": "complete",
-          "evidence_path": "logic_blocks.logic:ROOT:join:001.join_relation_detail.condition_filters"
+          "evidence_path": "logic_blocks.logic:ROOT:join:001.join_relation_detail.join_key_pairs"
         }
       ],
       "logic_blocks": [
@@ -495,7 +497,7 @@
             "join_type": "INNER",
             "left_input": "ods.nodes",
             "right_input": "ods.nodes",
-            "left_alias": "b",
+            "left_alias": "a",
             "right_alias": "b",
             "condition_expression": "`a`.`parent_id` = `b`.`id` AND `a`.`batch_id` = `b`.`batch_id`",
             "condition_fields": [
@@ -528,98 +530,70 @@
                 "input_ref_id": "input:ROOT:002"
               }
             ],
-            "join_key_pairs": [],
-            "condition_filters": [
+            "join_key_pairs": [
               {
-                "expression": "`a`.`parent_id` = `b`.`id`",
-                "fields": [
-                  {
-                    "scope": "ods.nodes",
-                    "column": "parent_id",
-                    "qualifier": "a",
-                    "binding_scope_id": "ROOT",
-                    "input_ref_id": "input:ROOT:001"
-                  },
-                  {
-                    "scope": "ods.nodes",
-                    "column": "id",
-                    "qualifier": "b",
-                    "binding_scope_id": "ROOT",
-                    "input_ref_id": "input:ROOT:002"
-                  }
-                ],
-                "physical_fields": [
+                "left": {
+                  "scope": "ods.nodes",
+                  "column": "parent_id",
+                  "qualifier": "a",
+                  "binding_scope_id": "ROOT",
+                  "input_ref_id": "input:ROOT:001"
+                },
+                "right": {
+                  "scope": "ods.nodes",
+                  "column": "id",
+                  "qualifier": "b",
+                  "binding_scope_id": "ROOT",
+                  "input_ref_id": "input:ROOT:002"
+                },
+                "left_fields": [
                   {
                     "table": "ods.nodes",
                     "field": "parent_id"
-                  },
+                  }
+                ],
+                "right_fields": [
                   {
                     "table": "ods.nodes",
                     "field": "id"
                   }
                 ],
-                "expression_resolution": {
-                  "status": "resolved",
-                  "resolution_type": "qualified_expression",
-                  "physical_source_fields": [
-                    {
-                      "table": "ods.nodes",
-                      "field": "parent_id"
-                    },
-                    {
-                      "table": "ods.nodes",
-                      "field": "id"
-                    }
-                  ],
-                  "generated_sources": [],
-                  "source_kind": "physical",
-                  "missing_reasons": [],
-                  "expanded_expression": "`a`.`parent_id` = `b`.`id`"
-                }
+                "operator": "=",
+                "expression": "`a`.`parent_id` = `b`.`id`"
               },
               {
-                "expression": "`a`.`batch_id` = `b`.`batch_id`",
-                "fields": [
-                  {
-                    "scope": "ods.nodes",
-                    "column": "batch_id",
-                    "qualifier": "a",
-                    "binding_scope_id": "ROOT",
-                    "input_ref_id": "input:ROOT:001"
-                  },
-                  {
-                    "scope": "ods.nodes",
-                    "column": "batch_id",
-                    "qualifier": "b",
-                    "binding_scope_id": "ROOT",
-                    "input_ref_id": "input:ROOT:002"
-                  }
-                ],
-                "physical_fields": [
+                "left": {
+                  "scope": "ods.nodes",
+                  "column": "batch_id",
+                  "qualifier": "a",
+                  "binding_scope_id": "ROOT",
+                  "input_ref_id": "input:ROOT:001"
+                },
+                "right": {
+                  "scope": "ods.nodes",
+                  "column": "batch_id",
+                  "qualifier": "b",
+                  "binding_scope_id": "ROOT",
+                  "input_ref_id": "input:ROOT:002"
+                },
+                "left_fields": [
                   {
                     "table": "ods.nodes",
                     "field": "batch_id"
                   }
                 ],
-                "expression_resolution": {
-                  "status": "resolved",
-                  "resolution_type": "qualified_expression",
-                  "physical_source_fields": [
-                    {
-                      "table": "ods.nodes",
-                      "field": "batch_id"
-                    }
-                  ],
-                  "generated_sources": [],
-                  "source_kind": "physical",
-                  "missing_reasons": [],
-                  "expanded_expression": "`a`.`batch_id` = `b`.`batch_id`"
-                }
+                "right_fields": [
+                  {
+                    "table": "ods.nodes",
+                    "field": "batch_id"
+                  }
+                ],
+                "operator": "=",
+                "expression": "`a`.`batch_id` = `b`.`batch_id`"
               }
             ],
-            "missing_reasons": [
-              "missing_join_key_pairs"
-            ],
+            "condition_filters": [],
+            "missing_reasons": [],
             "condition_expression_resolution": {
               "status": "resolved",
               "resolution_type": "qualified_expression",
@@ -643,7 +617,7 @@
               "expanded_expression": "`ods.nodes`.`parent_id` = `ods.nodes`.`id` AND `ods.nodes`.`batch_id` = `ods.nodes`.`batch_id`"
             },
             "join_condition_source": "on",
-            "trace_status": "partial"
+            "trace_status": "complete"
           },
           "display_expression": "`parent_id` = `id` and `batch_id` = `batch_id`"
         }

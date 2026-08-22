@@ -379,7 +379,7 @@ def parse_task_lineage(
             })
         statements.append(statement)
 
-    gaps.extend(_statement_fact_gaps(statement_lineage))
+    gaps.extend(_statement_fact_gaps(statement_lineage, task_level_gaps=gaps))
     metadata_coverage = _metadata_coverage(
         state_builder,
         statement_lineage,
@@ -443,6 +443,25 @@ def parse_task_lineage(
                 "storage; exclude them from final_table_states and from table-level "
                 "coverage before reconciling against a catalogue: "
                 + ", ".join(session_scoped)
+            ),
+        })
+    # Same phantom-table shape as above, different cause: INSERT OVERWRITE DIRECTORY
+    # writes a path, not a table, yet its `directory:` entry lands in final_table_states
+    # like any table. v1 documents the exclusion rule on target_table; without this the
+    # task document carried the entry with no hint at all (DIRTARGET-001).
+    directory_targets = sorted({
+        str(statement.get("target_table"))
+        for statement in statements
+        if str(statement.get("target_table") or "").startswith("directory:")
+    })
+    if directory_targets:
+        warnings.append({
+            "type": "directory_targets_present",
+            "scope": "TASK",
+            "msg": (
+                "these targets are directory writes, not tables; exclude them from "
+                "final_table_states and from table-level coverage before reconciling "
+                "against a catalogue: " + ", ".join(directory_targets)
             ),
         })
 
@@ -587,7 +606,11 @@ def _apply_projection_write(
     result = parse_scope_lineage(
         tree.sql(dialect=DIALECT),
         task_name=f"{task_name}#{statement['statement_index']}",
-        schema=dict(schema or {}),
+        # Not `dict(schema or {})`: a SchemaMap carries column types and comments on an
+        # attribute, and a dict() copy keeps the keys while silently dropping it — every
+        # nested statement then reports null type/comment for columns v1 documents fully.
+        # Nothing on the parse path mutates the mapping, so handing it over is safe.
+        schema=schema,
         target_metadata=target_metadata,
         # Hand over the AST parsed from the original script. Re-parsing the generated SQL
         # loses a WITH carried by an individual UNION branch and degrades the whole
@@ -596,6 +619,10 @@ def _apply_projection_write(
         regex_columns_enabled=regex_columns_enabled,
     )
     statement_id = statement["statement_id"]
+    # The nested v1 document self-describes the join key it is filed under: parsing went
+    # through the tree= entry, which cannot know the script position, but this caller does.
+    result.statement_id = statement_id
+    result.statement_index = statement["statement_index"]
     statement["model_status"] = "modeled"
     statement["target_table"] = result.target_table
     # Only true is recorded. `final_table_states` gains an entry for every relation a script
@@ -1561,15 +1588,33 @@ def _analysis_blocking_reasons(
     return reasons
 
 
-def _statement_fact_gaps(statement_lineage: Mapping[str, object]) -> list[dict]:
+def _statement_fact_gaps(
+    statement_lineage: Mapping[str, object],
+    task_level_gaps: list[dict] | None = None,
+) -> list[dict]:
+    # The statement contract now records its own projection_wildcard_unexpanded gap
+    # (STARGAP-001), and this task already emitted one per statement for the same
+    # condition — lifting the nested copy would report one stuck star twice. Only that
+    # type is deduplicated: two gaps of another type in one statement can be two facts.
+    already_starred = {
+        gap.get("statement_id")
+        for gap in (task_level_gaps or [])
+        if gap.get("gap_type") == "projection_wildcard_unexpanded"
+    }
     result: list[dict] = []
     for statement_id, lineage in statement_lineage.items():
         if not isinstance(lineage, dict):
             continue
         diagnostics = lineage.get("diagnostics") or {}
         for gap in diagnostics.get("lineage_fact_gaps") or []:
-            if isinstance(gap, dict):
-                result.append({"statement_id": statement_id, **dict(gap)})
+            if not isinstance(gap, dict):
+                continue
+            if (
+                gap.get("gap_type") == "projection_wildcard_unexpanded"
+                and statement_id in already_starred
+            ):
+                continue
+            result.append({"statement_id": statement_id, **dict(gap)})
     return result
 
 

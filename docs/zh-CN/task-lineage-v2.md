@@ -3,6 +3,8 @@
 schema_version 2.0 是显式 opt-in 的任务级契约。它保留脚本中的语句顺序，在同一对
 lineage.json / diagnostics.json 中描述字段值来源、行是否存在的依赖以及最终表状态。
 默认 1.0 仍然为每条 INSERT、INSERT OVERWRITE、CTAS 或 MERGE 分别生成产物。
+不确定该不该用 2.0，先读[按业务场景选契约](contract-selection.md)：只做字段血缘、
+加工步骤分析用默认 1.0 就够；本契约面向审计、事故排查、最终表状态这类"任务干了什么"的问题。
 
 ## 使用
 
@@ -39,6 +41,12 @@ write_task_lineage(result, "./output/daily_publish")
 | statement_lineage | INSERT/CTAS/MERGE 复用 Core v1 scope 事实形成的语句级证据。 |
 | end_to_end_lineage | 面向最终状态，分别保存值来源和行存在性来源。 |
 
+**顶层 `end_to_end_lineage` 是按「最终状态 × 列」归并的视图，不等价于 v1 的逐语句数组。**
+MERGE 的分支归属（`matched`/`not_matched`）在归并中被折叠；同一张表被写两次时 v1 出两条
+（每次写入一条），这里只留最终状态一条。这是设计——顶层本就面向最终状态——但意味着
+「读 v2 等于读 v1」只对 `statement_lineage.<statement_id>` 里的嵌套文档成立：要分支归属、
+逐次写入粒度，读嵌套文档，别读顶层数组。
+
 每条语句都有稳定的 statement_id、零基 statement_index、stmt_kind、category 和
 model_status。SET/空分号会保留在序列中但标为 ignored，不会被误算成数据变更失败。
 
@@ -48,6 +56,11 @@ model_status。SET/空分号会保留在序列中但标为 ignored，不会被�
 字段血缘本身不受影响：`mart.t.v ← tmp_v.v` 与 `tmp_v.v ← ods.real.v` 两跳仍各自作为事实保留，
 是否折叠成一跳由消费方决定。
 脚本里只要出现这类关系，`diagnostics.warnings[]` 会有一条 `session_scoped_relations_present` 列出全部关系名——标记在 `statement_sequence[]` 上、误导人的条目却在 `final_table_states` 里，不交叉比对就会漏掉，所以另发一条整脚本级别的提醒。
+
+`INSERT OVERWRITE DIRECTORY` 是另一种"幻影表"形态：目标是文件路径而不是表，
+`final_table_states` 里的条目形如 `directory:/warehouse/export/daily`，带 `directory:` 前缀。
+按 catalog 对账前同样要排除；脚本里出现这类写入时，`diagnostics.warnings[]` 会有一条
+`directory_targets_present` 列出全部此类目标（与 v1 在 `target_table` 上的排除规则同一口径）。
 
 ## 两种不能混淆的血缘
 
@@ -452,8 +465,12 @@ diagnostics.json.metadata_coverage 记录引用表、已覆盖表、缺失表、
 
 ## 兼容与消费
 
-1. v1 和 v2 必须输出到不同目录；
+1. v1 和 v2 必须输出到不同目录（两者的文件名相同，写进同一目录会互相覆盖，且产物里没有任何东西提示这发生过）；
 2. 消费者先检查 schema_version，未知 major version 必须拒绝；
 3. v2 以整个任务为一个产物，不能再假设一个目录只代表一条写表语句；
 4. --compact-json 只删除格式化空白，不改变 JSON 语义；
-5. 每次运行仍然只写 lineage.json 和 diagnostics.json。
+5. 每次运行仍然只写 lineage.json 和 diagnostics.json；
+6. **跨契约关联同一条语句，用 `statement_id`（及同口径的 `statement_index`），不要用 `task_id`。**
+   v1 的 `task_id` 后缀按写入序号编号、v2 按脚本位置编号，同一个 `demo#1` 在两份产物里指向
+   不同的语句，静默匹配不报错。v1 顶层与 v2 的 `statement_sequence[]`、`statement_lineage` 键、
+   嵌套文档顶层现在携带同一个 `stmt:NNN`，这是唯一被契约指定的关联键。

@@ -285,7 +285,10 @@ scope-lineage parse \
   --out /tmp/scope-lineage-v2
 ~~~
 
-See [Task Lineage 2.0](docs/zh-CN/task-lineage-v2.md).
+See [Task Lineage 2.0](docs/zh-CN/task-lineage-v2.md). Field lineage and
+transformation-step analysis read the per-statement documents embedded in
+`statement_lineage`; audits, incident forensics, and final table state read the
+task-level facts.
 
 ### Migrating from the removed contract 1.0
 
@@ -295,7 +298,7 @@ removed. Migration is mostly re-pointing:
 - A task document's `statement_lineage` maps each `statement_id` to exactly the former
   v1 statement document shape, in `statement_sequence` order — code that consumed a v1
   `lineage.json` consumes one entry unchanged, and `lineage.schema.json` remains that
-  entry's schema.
+  entry's schema (each entry is validated against it before writing).
 - Task-level answers live at the top level: `end_to_end_lineage` (final-state view),
   `table_state_graph`, `final_table_states`, and `task_dependencies`.
 - `render` and `render_mapping_markdown` accept a task document (one mapping section per

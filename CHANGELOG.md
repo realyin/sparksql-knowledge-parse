@@ -32,6 +32,47 @@
   pyright job. Deep imports of `scope_lineage.scope._shared`, `scope.types`, or
   `scope.sqlglot_config` (now `scope_lineage.sqlglot_config`) no longer resolve -- the
   supported surface remains the package facade.
+- The task contract no longer strips column types and comments while handing its schema to
+  per-statement parsing. `SchemaMap` carries them on an attribute, and a `dict()` copy kept
+  the keys while silently dropping it, so every nested statement in a v2 artifact reported
+  null type/comment for columns the v1 artifact of the same statement documented fully.
+- **Contract:** v1 documents now carry the script-position join key to v2: an optional
+  top-level `statement_id` (`stmt:NNN`, matching v2's `statement_sequence[].statement_id`
+  for the same statement) and `statement_index`. `task_id` cannot serve as the key -- v1
+  suffixes it by write ordinal, v2 by script position, so the same `demo#1` names different
+  statements in the two contracts and matches silently. Absent when parsing starts from a
+  caller-supplied tree, where the script position is unknown.
+- `parse_scope_lineage` (the single-statement entry) no longer applies its
+  "first write only" boundary silently. Writes beyond the first are recorded in
+  `skipped_statements` with `category: additional_write_statement` (plus their
+  `target_table`), an `additional_write_statements_not_modeled` warning names the targets,
+  and the script's non-write statements are recorded the same way the plural entry always
+  did. Previously a two-write script came back as the first write's document with nothing
+  recorded -- undeclared data loss on a public API symbol.
+- **Behavior change (CI exit codes):** an unexpanded `SELECT *` on ROOT is now a
+  root-impact `projection_wildcard_unexpanded` fact gap in the statement document -- the
+  same gap type the task level always emitted for the same condition. Pipelines gating on
+  `--fail-on-root-gap` or `--quality-policy strict` that previously passed such artifacts
+  now fail them; that is what those flags are for. The permissive default still exits zero.
+- Self-joins keep their two sides apart in `join_relation_detail`: `left_alias` and
+  `right_alias` no longer collapse onto the later alias, and equality conjuncts whose two
+  refs resolve to the same table become `join_key_pairs` oriented by qualifier instead of
+  falling into `condition_filters` as an apparent tautology.
+- `write_task_lineage` now validates every nested v1 document in `statement_lineage`
+  against the v1 schema before publishing; the v2 schema types them as bare objects, so
+  the envelope validation never looked inside.
+- A `directory:` target in a v2 task raises a `directory_targets_present` task-level
+  warning: the entry lands in `final_table_states` like a table, and v1 already documents
+  the exclusion rule on `target_table` while v2 said nothing.
+- A trailing comment (`INSERT ...; -- done`) is recorded as `stmt_kind: COMMENT` instead
+  of `SEMICOLON`, in both contracts; the category stays `empty_statement`.
+- Docs: designated `statement_id` as the only cross-contract statement key; marked
+  `metadata_coverage`/`analysis_status` guidance as contract-2.0-only (v1 diagnostics
+  never carried those keys); stated that top-level v2 `end_to_end_lineage` is a
+  final-state merged view not equivalent to v1's per-statement arrays (the nested
+  documents are the equivalent surface); documented the `directory:` phantom-table
+  exclusion in v2; and stated the consequence of writing both contracts into one
+  directory (same file names, silent overwrite).
 
 ## 0.1.16
 - MERGE assignment values now resolve in the scope their WHEN branch can actually see. Spark
