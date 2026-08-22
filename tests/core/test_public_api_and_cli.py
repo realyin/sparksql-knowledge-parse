@@ -1,4 +1,12 @@
-"""Public import surface and minimal Core CLI behavior."""
+"""Public import surface and minimal Core CLI behavior.
+
+The required-symbols fixture is a LOWER BOUND: every listed symbol must stay exported;
+a symbol absent from the list is not thereby removable -- it may simply predate the
+guard. Removing anything from PUBLIC_CORE_API takes a deprecation cycle and downstream
+confirmation. Currently pending that confirmation (kept exported, not yet in the
+fixture): build_end_to_end_lineage, build_scope_profile, materialize_schema,
+table_details_for_table. (Governance plan WI-13.)
+"""
 
 from __future__ import annotations
 
