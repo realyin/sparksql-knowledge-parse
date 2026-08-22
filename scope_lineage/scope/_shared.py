@@ -78,6 +78,33 @@ from .expression_refs import (  # noqa: F401 -- transitional re-export until WI-
     extract_qualified_field_refs,
 )
 
+from .expansion_budget import (  # noqa: F401 -- transitional re-export (WI-06)
+    EXPANSION_MAX_CHARS,
+    EXPANSION_MAX_SUBSTITUTIONS,
+    ExpansionBudget,
+)
+
+from .expression_text import (  # noqa: F401 -- transitional re-export (WI-06)
+    _function_names,
+    _parenthesize_replacement_expression,
+    _qualifier_present,
+    _replace_qualified_ref_with_expression,
+    _replace_unqualified_ref_with_expression,
+    _unexpanded_bound_aliases_in_expression,
+)
+
+from .function_catalog import (  # noqa: F401 -- transitional re-export (WI-06)
+    _AGGREGATE_FUNCTIONS,
+    _CLEANING_FUNCTIONS,
+    _KNOWN_SCALAR_FUNCTIONS,
+    _KNOWN_UDAFS,
+)
+
+from .sequences import (  # noqa: F401 -- transitional re-export (WI-06)
+    _extend_unique,
+    _unique_ordered,
+)
+
 def _populate_union_output_branch_mappings(result: ScopeLineageResult) -> None:
     for scope_id, scope_data in result.scopes.items():
         if scope_data.kind != "union":
@@ -417,39 +444,6 @@ def _normalize_expression_resolution(
         normalized["scope_output_trace"] = list(resolution.get("scope_output_trace") or [])
     return normalized
 
-def _unexpanded_bound_aliases_in_expression(scope_data: ScopeData, expression: str | None) -> list[str]:
-    expression = _strip_sql_comments(_strip_sql_string_literals(str(expression or "")))
-    if not expression:
-        return []
-    unresolved_aliases: list[str] = []
-    for binding in scope_data.alias_source_bindings or []:
-        alias = str(binding.get("alias") or "")
-        if not alias or not _qualifier_present(expression, alias):
-            continue
-        physical_ids = {str(item) for item in binding.get("physical_source_ids") or [] if item}
-        physical_id = str(binding.get("physical_source_id") or "")
-        if physical_id:
-            physical_ids.add(physical_id)
-        # "physical_table" is the value the binding builder emits; comparing against
-        # "physical" here meant this exemption never fired, so an expression that kept a
-        # physical table's own name — already a fully resolved reference — was reported as
-        # an unexpanded alias. The `alias in physical_ids` half still holds the line: a
-        # local alias such as `FROM ods.source s` that survived expansion is not exempt,
-        # because that one really did fail to rewrite.
-        # `qualify` names an unaliased table after itself, so `FROM ods.pay` yields
-        # references written `pay.uid` while the physical id stays `ods.pay`. Comparing the
-        # two directly never matched, and a fully resolved direct physical source was reported
-        # as an unexpanded alias (BARE-ALIAS-001). Matching the id's table segment as well
-        # still refuses a genuine local alias: `FROM ods.source s` leaves `s`, which is
-        # neither the id nor its table name, and an `s.` that survived expansion really did
-        # fail to rewrite.
-        if binding.get("source_type") == "physical_table" and (
-            alias in physical_ids
-            or alias in {identifier.rsplit(".", 1)[-1] for identifier in physical_ids}
-        ):
-            continue
-        unresolved_aliases.append(alias)
-    return _unique_ordered(unresolved_aliases)
 
 def _dedupe_generated_source_dicts(sources: list[dict[str, str]]) -> list[dict[str, str]]:
     deduped: list[dict[str, str]] = []
@@ -983,195 +977,19 @@ def _dedupe_physical_field_dicts(fields: list[dict[str, str]]) -> list[dict[str,
         deduped.append({"table": table, "field": field})
     return deduped
 
-def _qualifier_present(expression: str, qualifier: str) -> bool:
-    if f"`{qualifier}`." in expression:
-        return True
-    return bool(_cached_pattern(rf"(?<![.`\w]){re.escape(qualifier)}\.").search(expression))
-
-# Expansion budget for `expanded_expression`. Inlining an upstream field's expanded text copies
-# it once per reference, and each additional scope layer multiplies again; a moderately sized
-# statement expanded to a string and a lineage.json three orders of magnitude larger (PERF-001).
-#
-# The budget bounds the copy by DECLINING a substitution, not by cutting text. What is left
-# behind is the original `a.field` reference — still valid SQL, and itself the pointer to the
-# upstream output that holds the rest of the logic. Because upstream expressions are bounded
-# first, downstream ones inline small text, so the multiplication collapses at every layer
-# instead of only at the top.
-EXPANSION_MAX_CHARS = 262_144       # 256 KiB per materialized expression
-EXPANSION_MAX_SUBSTITUTIONS = 2_000  # guards reference count, which chars alone does not
 
 
-class ExpansionBudget:
-    """One expression's expansion allowance, and the record of what it had to decline.
-
-    Shared by every inlining site so a single expression cannot exceed the limit by being
-    grown from several places, and so the reason is reported the same way everywhere.
-    """
-
-    __slots__ = ("max_chars", "max_substitutions", "substitutions", "stop_reason", "skipped_refs")
-
-    def __init__(self, max_chars: int | None = None,
-                 max_substitutions: int | None = None) -> None:
-        # Read at construction, not as a default argument: the limits are module-level policy
-        # and tests raise them to prove the case under test actually blows up without them.
-        self.max_chars = EXPANSION_MAX_CHARS if max_chars is None else max_chars
-        self.max_substitutions = (
-            EXPANSION_MAX_SUBSTITUTIONS if max_substitutions is None else max_substitutions
-        )
-        self.substitutions = 0
-        self.stop_reason: str | None = None
-        self.skipped_refs: list[dict] = []
-
-    @property
-    def status(self) -> str:
-        return "bounded" if self.stop_reason else "full"
-
-    def _decline(self, reason: str, ref: str, scope_id: str | None, field: str | None) -> None:
-        self.stop_reason = self.stop_reason or reason
-        entry = {"ref": ref, "reason": reason}
-        if scope_id:
-            entry["scope_id"] = scope_id
-        if field:
-            entry["field"] = field
-        if entry not in self.skipped_refs:
-            self.skipped_refs.append(entry)
-
-    def substitute(self, expression: str, replacement: str, apply, *,
-                   ref: str, scope_id: str | None = None, field: str | None = None) -> str:
-        """Apply `apply(expression, replacement)` unless it would break the budget.
-
-        Declining is checked twice: once cheaply on the replacement itself (a single upstream
-        expression already at the limit can never be inlined), and once on the actual result,
-        because one reference can occur many times.
-        """
-        if not replacement:
-            return expression
-        if self.substitutions >= self.max_substitutions:
-            self._decline("max_substitutions", ref, scope_id, field)
-            return expression
-        if len(replacement) > self.max_chars:
-            self._decline("max_chars", ref, scope_id, field)
-            return expression
-        expanded = apply(expression, replacement)
-        if len(expanded) > self.max_chars:
-            self._decline("max_chars", ref, scope_id, field)
-            return expression
-        if expanded != expression:
-            self.substitutions += 1
-        return expanded
 
 
-def _replace_qualified_ref_with_expression(expression: str, qualifier: str, field: str, replacement: str) -> str:
-    replacement_sql = _parenthesize_replacement_expression(replacement)
-    expression = expression.replace(f"`{qualifier}`.`{field}`", replacement_sql)
-    expression = expression.replace(f"`{qualifier}`.{replacement_sql}", replacement_sql)
-    if f"{qualifier}.{field}" in expression:
-        expression = _cached_pattern(
-            rf"(?<![.`\w]){re.escape(qualifier)}\.{re.escape(field)}(?![`.\w])"
-        ).sub(lambda _match: replacement_sql, expression)
-    expression = expression.replace(f"{qualifier}.{replacement_sql}", replacement_sql)
-    return expression
 
-def _replace_unqualified_ref_with_expression(expression: str, field: str, replacement: str) -> str:
-    replacement_sql = _parenthesize_replacement_expression(replacement)
-    expression = _cached_pattern(
-        rf"(?<![.`\w])`{re.escape(field)}`(?![`.\w])"
-    ).sub(lambda _match: replacement_sql, expression)
-    return _cached_pattern(
-        rf"(?<![.`'\"\w]){re.escape(field)}(?![`.'\"\w])"
-    ).sub(lambda _match: replacement_sql, expression)
 
-def _parenthesize_replacement_expression(expression: str) -> str:
-    stripped = expression.strip()
-    if re.fullmatch(r"`[^`]+`\.`[^`]+`", stripped):
-        return stripped
-    if stripped.startswith("(") and stripped.endswith(")"):
-        return stripped
-    return f"({stripped})"
 
-def _function_names(expression: str) -> list[str]:
-    names = []
-    for match in re.finditer(r"\b([a-z_][a-z0-9_]*)\s*\(", expression):
-        name = match.group(1)
-        if name in {"cast", "case", "if", "over"}:
-            continue
-        if name not in names:
-            names.append(name)
-    return names
 
-_AGGREGATE_FUNCTIONS = {
-    "avg",
-    "collect_list",
-    "collect_set",
-    "count",
-    "count_if",
-    "max",
-    "min",
-    "sum",
-}
 
-_CLEANING_FUNCTIONS = {
-    "coalesce",
-    "nvl",
-    "replace",
-    "regexp_replace",
-    "substr",
-    "substring",
-    "trim",
-}
 
-_KNOWN_SCALAR_FUNCTIONS = {
-    *_AGGREGATE_FUNCTIONS,
-    *_CLEANING_FUNCTIONS,
-    "abs",
-    "ceil",
-    "concat",
-    "concat_ws",
-    "current_date",
-    "current_timestamp",
-    "date_add",
-    "date_format",
-    "date_sub",
-    "datediff",
-    "floor",
-    "from_unixtime",
-    "greatest",
-    "least",
-    "left",
-    "length",
-    "lower",
-    "md5",
-    "now",
-    "regexp_extract",
-    "right",
-    "round",
-    "row_number",
-    "sha2",
-    "split",
-    "to_date",
-    "unix_timestamp",
-    "upper",
-}
 
-def _unique_ordered(values: list[str]) -> list[str]:
-    """Order-preserving dedupe that drops falsy entries.
 
-    The single implementation (WI-03): the former `_unique_ordered__resolver`, which kept
-    empty strings, differed only at call sites whose inputs are provably non-empty
-    (or-fallback scope ids and qualified table names), so its behavior was unreachable.
-    """
-    seen: set[str] = set()
-    result: list[str] = []
-    for value in values:
-        if value and value not in seen:
-            seen.add(value)
-            result.append(value)
-    return result
 
-def _extend_unique(target: list[str], values: list[str]) -> None:
-    for value in values:
-        if value and value not in target:
-            target.append(value)
 
 def _find_alias_in_parent(sg_scope: Scope) -> str | None:
     """Find the alias this scope uses in its parent scope's sources."""
@@ -1186,10 +1004,6 @@ def _find_alias_in_parent(sg_scope: Scope) -> str | None:
             return name
     return None
 
-_KNOWN_UDAFS = frozenset({
-    "COLLECT_SET", "COLLECT_LIST", "CONCAT_WS", "PERCENTILE",
-    "PERCENTILE_APPROX", "HISTOGRAM_NUMERIC", "NVL",
-})
 
 def _constant_sources(expression: str | None) -> list[SourceRef]:
     """Represent a literal as a traceable leaf instead of an empty lineage edge."""

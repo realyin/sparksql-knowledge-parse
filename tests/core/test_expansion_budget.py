@@ -79,7 +79,7 @@ class TestExpansionBudget:
         return {output.name: output for output in result.scopes["ROOT"].outputs}
 
     def test_no_expression_exceeds_the_budget(self):
-        from scope_lineage.scope._shared import EXPANSION_MAX_CHARS
+        from scope_lineage.scope.expansion_budget import EXPANSION_MAX_CHARS
 
         result = parse_scope_lineage(self.SQL, "expansion_budget", schema=self.SCHEMA)
         oversized = [
@@ -103,11 +103,11 @@ class TestExpansionBudget:
         past the cap — proving the fixture still reproduces the defect — and the default
         limits must then bring it back under. A fixed ratio would only pin whatever number
         today's code happens to produce."""
-        from scope_lineage.scope import _shared
+        from scope_lineage.scope import expansion_budget
 
-        cap = _shared.EXPANSION_MAX_CHARS
-        monkeypatch.setattr(_shared, "EXPANSION_MAX_CHARS", 10 ** 12)
-        monkeypatch.setattr(_shared, "EXPANSION_MAX_SUBSTITUTIONS", 10 ** 9)
+        cap = expansion_budget.EXPANSION_MAX_CHARS
+        monkeypatch.setattr(expansion_budget, "EXPANSION_MAX_CHARS", 10 ** 12)
+        monkeypatch.setattr(expansion_budget, "EXPANSION_MAX_SUBSTITUTIONS", 10 ** 9)
         unbounded = self._largest_expansion()
         assert unbounded > cap, (
             f"用例已不再复现膨胀(无上限时仅 {unbounded:,} 字符,上限 {cap:,}),firepower 失效"
@@ -123,7 +123,7 @@ class TestExpansionBudget:
     def test_a_bounded_expansion_says_so_and_names_what_it_skipped(self):
         """Silent truncation is the failure mode this must not have: a consumer reading a
         shortened expression with no marker would take it for the whole logic."""
-        from scope_lineage.scope._shared import ExpansionBudget
+        from scope_lineage.scope.expansion_budget import ExpansionBudget
 
         budget = ExpansionBudget(max_chars=40)
         out = budget.substitute(
