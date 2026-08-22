@@ -39,3 +39,20 @@ def test_task_lineage_contract_matches_golden_bytes(tmp_path: Path) -> None:
                 assert (output / name).read_bytes() == _golden_bytes(
                     case_dir / name
                 ), f"{case_dir.name}/{name}"
+
+
+def test_every_golden_statement_entry_validates_against_the_statement_schema() -> None:
+    """The "1.0" schema survives the retired v1 artifact as the statement-document
+    schema; every statement_lineage entry a task document embeds must satisfy it."""
+    import json
+
+    from scope_lineage.contract.validation import validate_lineage_document
+
+    fixtures = Path(__file__).parent / "fixtures" / "task_lineage_contract"
+    entries = 0
+    for lineage_path in sorted(fixtures.glob("*/lineage.json")):
+        document = json.loads(lineage_path.read_text(encoding="utf-8"))
+        for entry in (document.get("statement_lineage") or {}).values():
+            validate_lineage_document(entry)
+            entries += 1
+    assert entries, "no statement entries in the golden corpus -- fixture layout changed?"

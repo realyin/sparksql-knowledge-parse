@@ -55,7 +55,7 @@ def test_the_column_keeps_its_physical_source():
 
 def test_a_real_local_alias_is_still_reported():
     """`s` is not the table's name, so an `s.` left in the expression is a genuine failure."""
-    from scope_lineage.scope._shared import _unexpanded_bound_aliases_in_expression
+    from scope_lineage.scope.expression_text import _unexpanded_bound_aliases_in_expression
     from scope_lineage.scope.scope_types import ScopeData
 
     scope_data = ScopeData(kind="root")
@@ -70,7 +70,7 @@ def test_a_real_local_alias_is_still_reported():
 
 
 def test_the_bare_name_of_a_qualified_source_is_exempt():
-    from scope_lineage.scope._shared import _unexpanded_bound_aliases_in_expression
+    from scope_lineage.scope.expression_text import _unexpanded_bound_aliases_in_expression
     from scope_lineage.scope.scope_types import ScopeData
 
     scope_data = ScopeData(kind="root")

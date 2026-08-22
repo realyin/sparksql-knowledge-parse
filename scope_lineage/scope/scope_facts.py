@@ -23,12 +23,70 @@ from .scope_types import (
     DiagnosticWarning,
     SourceRef,
 )
-from ._shared import ExpansionBudget, _pivot_of_source_node, _source_item_from_ast_node
-from ._shared import _cached_pattern, _dedupe_generated_source_dicts, _dedupe_physical_field_dicts, _dedupe_rowset_source_dicts, _extend_unique, _find_alias_in_parent, _function_names, _is_cross_join_type, _is_internal_scope_id, _normalize_expression_resolution, _ordered_physical_fields_in_expression, _physical_fields_referenced_in_expression, _physical_source_fields_for_refs, _physical_source_ids_for_input, _populate_union_output_branch_mappings, _qualified_field_refs, _qualified_physical_field_sql, _replace_qualified_ref_with_expression, _replace_struct_field_access_from_upstream, _replace_unqualified_ref_with_expression, _resolve_expression_resolution_from_output_sources, _resolved_expression_fact_from_source_refs, _rowset_sources_from_upstream_output, _source_kind_for_resolution, _source_ref_to_dict, _source_refs_from_detail_fields, _source_type_from_id, _star_passthrough_output_fact, _strip_sql_comments, _unexpanded_bound_aliases_in_expression, _unique_ordered, DIALECT, PARSE_OPTS, _AGGREGATE_FUNCTIONS, _CLEANING_FUNCTIONS, _KNOWN_SCALAR_FUNCTIONS, _SCOPE_ID_ATTR
+from .expansion_budget import ExpansionBudget
+from .sqlglot_walk import _pivot_of_source_node, _source_item_from_ast_node
+from ._constants import DIALECT, PARSE_OPTS, _SCOPE_ID_ATTR
+from .expression_expansion import _ordered_physical_fields_in_expression, _physical_fields_referenced_in_expression, _replace_struct_field_access_from_upstream, _resolve_expression_resolution_from_output_sources, _resolved_expression_fact_from_source_refs
+from .expression_refs import _cached_pattern, _qualified_field_refs, _strip_sql_comments
+from .expression_text import _function_names, _replace_qualified_ref_with_expression, _replace_unqualified_ref_with_expression, _unexpanded_bound_aliases_in_expression
+from .function_catalog import _AGGREGATE_FUNCTIONS, _CLEANING_FUNCTIONS, _KNOWN_SCALAR_FUNCTIONS
+from .sequences import _extend_unique, _unique_ordered
+from .source_refs import _dedupe_generated_source_dicts, _dedupe_physical_field_dicts, _dedupe_rowset_source_dicts, _is_cross_join_type, _is_internal_scope_id, _normalize_expression_resolution, _physical_source_fields_for_refs, _physical_source_ids_for_input, _qualified_physical_field_sql, _rowset_sources_from_upstream_output, _source_kind_for_resolution, _source_ref_to_dict, _source_refs_from_detail_fields, _source_type_from_id
+from .sqlglot_walk import _find_alias_in_parent
+from .star_passthrough import _populate_union_output_branch_mappings, _star_passthrough_output_fact
 from .column_expression_resolution import _expression_resolution_for_scope_column
 from .lineage_fact_gaps import _populate_lineage_fact_gaps
 from .passthrough_resolution import _propagate_passthrough_expression_resolution
 from .logic_block import _populate_logic_blocks  # noqa: F401
+
+
+# The FRONT resolution segment used to be hand-unrolled (P I O, P I O, P I); full
+# rounds run to a fixed point were verified byte-identical on the golden corpus, the
+# sqlglot compat matrix, and an old-vs-new differential over the example corpus. The
+# tail segment after the detail refreshes is deliberately NOT this loop -- see the
+# comment there. Floor of 3 keeps at least the unrolled coverage even if the
+# fingerprint ever misses a mutated field; ceiling per the governance plan (WI-09).
+_RESOLUTION_MIN_ROUNDS = 3
+_RESOLUTION_MAX_ROUNDS = 6
+
+
+def _resolution_fingerprint(result: ScopeLineageResult) -> int:
+    """Cheap stability probe over every field the three resolution passes mutate."""
+    return hash(tuple(
+        (
+            scope_id,
+            output.name,
+            output.expanded_expression,
+            output.expansion_status,
+            repr(output.expression_resolution),
+            repr(output.unexpanded_refs),
+            repr(output.sources),
+        )
+        for scope_id, scope_data in result.scopes.items()
+        for output in scope_data.outputs
+    ))
+
+
+def _run_resolution_rounds(result: ScopeLineageResult) -> None:
+    fingerprint = _resolution_fingerprint(result)
+    for round_index in range(_RESOLUTION_MAX_ROUNDS):
+        _propagate_passthrough_expression_resolution(result)
+        _resolve_internal_scope_expression_resolution(result)
+        _resolve_expression_resolution_from_output_sources(result)
+        next_fingerprint = _resolution_fingerprint(result)
+        if round_index + 1 >= _RESOLUTION_MIN_ROUNDS and next_fingerprint == fingerprint:
+            return
+        fingerprint = next_fingerprint
+    # Still changing at the ceiling: record it the way expansion_status records its budget --
+    # the artifact stays valid, the consumer learns the resolution text may not be final.
+    result.diagnostics.warnings.append(DiagnosticWarning(
+        type="resolution_rounds_exhausted",
+        scope="TASK",
+        msg=(
+            "expression resolution was still changing after "
+            f"{_RESOLUTION_MAX_ROUNDS} rounds; resolutions may be incomplete"
+        ),
+    ))
 
 
 def _populate_enhanced_scope_facts(
@@ -36,8 +94,38 @@ def _populate_enhanced_scope_facts(
     all_scopes: list[Scope],
     schema: dict | None = None,
 ) -> None:
-    """Populate additional per-scope facts for refactor-oriented analysis."""
+    """Populate additional per-scope facts for refactor-oriented analysis.
 
+    Four phases, each a named function below. A new pass joins one of the phases -- the
+    wiring guard test red-flags any pass function defined but not reachable from here.
+    """
+    _populate_structural_facts(result, all_scopes, schema)
+    _run_resolution_rounds(result)
+    _refresh_detail_resolutions(result)
+    # The tail segment is NOT the convergence loop, and its exact truncation is
+    # load-bearing: the internal pass is not idempotent on settled outputs (see the
+    # comment at _should_rebuild_internal_expansion_from_expression), so one extra run
+    # after the final output-sources call rewrites settled resolutions -- collapsing a
+    # generated output's two-step scope_projection chain and re-wrapping expressions.
+    # Proven by old-vs-new differential comparison over the example corpus (2026-08-23);
+    # the sentinels in test_scope_output_trace_granularity stand on this ordering.
+    _propagate_passthrough_expression_resolution(result)
+    _resolve_internal_scope_expression_resolution(result)
+    _propagate_passthrough_expression_resolution(result)
+    _resolve_internal_scope_expression_resolution(result)
+    _propagate_passthrough_expression_resolution(result)
+    _resolve_expression_resolution_from_output_sources(result)
+    _finalize_facts(result, schema)
+
+
+def _populate_structural_facts(
+    result: ScopeLineageResult,
+    all_scopes: list[Scope],
+    schema: dict | None,
+) -> None:
+    """Phase 1 -- structure. Writes scope raw_sql, input_edges, logic_blocks, bindings,
+    union_branch_alignment, outputs, field_usage, and final target columns. No
+    expression_resolution content yet."""
     for sg_scope in all_scopes:
         scope_id = getattr(sg_scope, _SCOPE_ID_ATTR, None)
         if not scope_id or scope_id not in result.scopes:
@@ -56,23 +144,21 @@ def _populate_enhanced_scope_facts(
     _populate_scope_outputs(result)
     _populate_scope_field_usage(result, schema)
     _populate_final_targets(result)
-    _propagate_passthrough_expression_resolution(result)
-    _resolve_internal_scope_expression_resolution(result)
-    _resolve_expression_resolution_from_output_sources(result)
-    _propagate_passthrough_expression_resolution(result)
-    _resolve_internal_scope_expression_resolution(result)
-    _resolve_expression_resolution_from_output_sources(result)
-    _propagate_passthrough_expression_resolution(result)
-    _resolve_internal_scope_expression_resolution(result)
+
+
+def _refresh_detail_resolutions(result: ScopeLineageResult) -> None:
+    """Phase 3 -- detail refresh. Rewrites aggregate and window outputs'
+    expression_resolution with their detail facts; runs once between the two
+    convergence segments."""
     _refresh_aggregation_detail_expression_resolution(result)
     _refresh_window_detail_expression_resolution(result)
     _refresh_window_output_expression_resolutions(result)
-    _propagate_passthrough_expression_resolution(result)
-    _resolve_internal_scope_expression_resolution(result)
-    _propagate_passthrough_expression_resolution(result)
-    _resolve_internal_scope_expression_resolution(result)
-    _propagate_passthrough_expression_resolution(result)
-    _resolve_expression_resolution_from_output_sources(result)
+
+
+def _finalize_facts(result: ScopeLineageResult, schema: dict | None) -> None:
+    """Phase 5 -- settlement. Reads the settled resolutions to finish reintroduced
+    references, build union branch mappings and provenance traces, derive mapping
+    chains, fact gaps, and logic-block features; prunes star warnings."""
     # Runs after the expansion passes have settled: it can only finish references those
     # passes reintroduced, so there is nothing to do until they stop changing the text.
     _finish_reintroduced_expansions(result)
@@ -155,7 +241,7 @@ def _populate_scope_sql(scope_data: ScopeData, sg_scope: Scope) -> None:
     try:
         scope_data.raw_sql = sg_scope.expression.sql(dialect=DIALECT)
         scope_data.raw_sql_available = bool(scope_data.raw_sql)
-    except Exception:
+    except Exception:  # noqa: BLE001 - raw_sql is evidence, not structure; absence is recorded as raw_sql_available=False
         scope_data.raw_sql = None
         scope_data.raw_sql_available = False
 
@@ -1650,7 +1736,7 @@ def _expand_reintroduced_refs(
     return True
 
 
-def _resolve_internal_scope_expression_resolution(result: ScopeLineageResult) -> None:
+def _resolve_internal_scope_expression_resolution(result: ScopeLineageResult) -> None:  # noqa: C901 - legacy exemption (WI-11): shrink when next touched
     output_lookup = {
         (scope_id, output.name): output
         for scope_id, scope_data in result.scopes.items()
@@ -2369,6 +2455,14 @@ def _should_rebuild_internal_expansion_from_expression(
         _qualified_ref_present(expanded_expression, qualifier, field)
         for qualifier, field in internal_refs
     )
+    # Absent internal refs are ambiguous: expansion may have mangled the text, or it may
+    # have FINISHED -- replaced every internal ref with its physical or generated leaves.
+    # Rebuilding in the second case is why the whole pass is NOT idempotent, and why the
+    # pipeline tail's truncation is load-bearing (WI-09 root cause). An exemption for
+    # settled resolutions was tried and REVERTED: it also fires mid-pipeline, where the
+    # old sequence deliberately rebuilt (differential comparison 2026-08-23 showed a
+    # trace-step expression changing), so the protection lives in the pipeline ordering
+    # and its sentinels, not here.
     return has_unexpanded_alias_reason or lost_original_internal_refs
 
 

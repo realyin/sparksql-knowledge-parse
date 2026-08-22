@@ -10,11 +10,44 @@ when the SQL is ambiguous.
 ## Development
 
 ```bash
-python -m pip install -e ".[dev]"     # editable install with pytest/jsonschema/build
+python -m pip install -e ".[dev]" -c constraints-dev.txt   # pins sqlglot to a CI-matrix version
 python -m pytest -q tests/core
 python -m pytest tests/core/test_lineage_contract_baseline.py -q
 git diff --check                       # whitespace/conflict check after edits
 ```
+
+A change that claims to be behavior-neutral (refactors above all) must prove it against
+more than the 12 golden fixtures -- they once missed three real output changes that a
+corpus-wide comparison caught. Run the differential harness against the branch point:
+
+```bash
+python tests/architecture/differential_compare.py main
+```
+
+It runs both code versions over every example task, example SQL, and golden case
+(currently 21 inputs, ~257k leaf key/value pairs) and reports each difference with its
+exact JSON path; exit 0 means byte-identical documents.
+
+Before landing any change that re-records a golden baseline, rebase on the latest `main` and
+run the suite once per CI compat-matrix sqlglot version -- a baseline recorded against one
+version can silently disagree with the others:
+
+```bash
+for v in 30.0.0 30.16.0 30.17.0; do
+  pip install -q "sqlglot==$v" && python -m pytest -q || break
+done
+pip install -q -c constraints-dev.txt sqlglot   # restore the dev pin afterwards
+```
+
+Seven functions are 150 lines or longer (`parse_task_lineage`,
+`_resolve_internal_scope_expression_resolution`, `_apply_projection_write`,
+`_build_result_from_scope`, `cli.main`, `_resolve_merge_columns`, `_expand_star_into_columns`).
+When a change touches one of them, extract the segment you modified into a named private
+function as part of the same change -- they shrink opportunistically, never grow. Ruff's
+`C901` (threshold 24) keeps new complexity out; the four legacy exemptions are marked
+`noqa: C901 - legacy exemption (WI-11)` and each removal is welcome. Every blind
+`except Exception` must carry a `noqa: BLE001 - <reason>` naming why the boundary is
+allowed to be blind.
 
 Keep Core domain-neutral. Warehouse layer names, business-domain rules, report builders, and
 modeling recommendations belong in downstream projects rather than this package.

@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Tuple
 from sqlglot import ErrorLevel
 from sqlglot import exp
 
-from .sqlglot_config import suppress_invalid_json_path_warnings
+from ..sqlglot_config import suppress_invalid_json_path_warnings
 from ..metadata.schema_metadata import load_schema as load_schema, normalize_table_name as _schema_normalize_table_name, strip_catalog_prefix as _strip_catalog_prefix
 
 

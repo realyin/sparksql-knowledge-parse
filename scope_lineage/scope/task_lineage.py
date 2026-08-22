@@ -9,7 +9,8 @@ import sqlglot
 from sqlglot import exp
 
 from ..metadata.schema_metadata import DictSchemaProvider
-from ._shared import DIALECT, PARSE_OPTS, render_sql_or_none
+from ._constants import DIALECT, PARSE_OPTS
+from .sqlglot_walk import render_sql_or_none
 from .end_to_end import _physical_fields_for_scope_column
 from .scope_types import ScopeLineageResult
 from .ctas_missing_as import repair_ctas_missing_as
@@ -367,7 +368,7 @@ def parse_task_lineage(
                         f"{statement['stmt_kind']} is not modeled by task lineage"
                     ),
                 })
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - statement boundary: recorded as model_status=failed + LINEAGE_ERROR, script continues
             parse_failed = True
             statement["model_status"] = "failed"
             warnings.append({
@@ -595,6 +596,11 @@ def _apply_projection_write(
     declared_overwrite_mode: "str | None" = None,
     dynamic_partition_overwrite: bool = False,
 ) -> None:
+    # Known inverted edge (scope -> contract), whitelisted by the dependency-direction
+    # architecture test and kept at the v1 retirement (WI-12, 0.3.0): statement_lineage
+    # entries ARE the task contract's payload, so assembling them through the statement
+    # converter is this module's job; re-homing the converter would only trade this
+    # documented edge for a scope<->serialize package cycle.
     from ..contract.lineage import to_lineage_dict
 
     result = parse_scope_lineage(

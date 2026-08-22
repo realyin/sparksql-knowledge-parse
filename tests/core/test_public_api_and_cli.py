@@ -1,4 +1,13 @@
-"""Public import surface and minimal Core CLI behavior."""
+"""Public import surface and minimal Core CLI behavior.
+
+The required-symbols fixture is a LOWER BOUND: every listed symbol must stay exported;
+a symbol absent from the list is not thereby removable -- it may simply predate the
+guard. Removing anything from PUBLIC_CORE_API takes a deprecation cycle and downstream
+confirmation. The four symbols once pending confirmation (build_end_to_end_lineage,
+build_scope_profile, materialize_schema, table_details_for_table) were removed with the
+downstream's retirement -- their implementations remain internal to the packages that
+own them. (Governance plan WI-13, closed.)
+"""
 
 from __future__ import annotations
 
@@ -50,7 +59,7 @@ def test_core_cli_writes_only_lineage_and_diagnostics(tmp_path) -> None:
         "lineage.json",
         "diagnostics.json",
     }
-    assert json.loads((task_dir / "lineage.json").read_text())["schema_version"] == "1.0"
+    assert json.loads((task_dir / "lineage.json").read_text())["schema_version"] == "2.0"
 
 
 def test_core_cli_accepts_exported_task_json_and_keeps_dependencies(tmp_path) -> None:
@@ -169,9 +178,10 @@ def test_core_cli_preserves_catalog_by_default_and_strips_configured_prefix(
         "--out",
         str(default_output),
     ]) == 0
-    default_lineage = json.loads(
+    default_doc = json.loads(
         (default_output / "catalog" / "lineage.json").read_text(encoding="utf-8")
     )
+    default_lineage = next(iter(default_doc["statement_lineage"].values()))
     assert default_lineage["source_tables"] == ["warehouse_catalog.ods.orders"]
 
     configured_output = tmp_path / "configured"
@@ -184,11 +194,12 @@ def test_core_cli_preserves_catalog_by_default_and_strips_configured_prefix(
         "--out",
         str(configured_output),
     ]) == 0
-    configured_lineage = json.loads(
+    configured_doc = json.loads(
         (configured_output / "catalog" / "lineage.json").read_text(
             encoding="utf-8"
         )
     )
+    configured_lineage = next(iter(configured_doc["statement_lineage"].values()))
     assert configured_lineage["source_tables"] == ["ods.orders"]
     assert configured_lineage["end_to_end_lineage"][0]["physical_sources"] == [
         {"table": "ods.orders", "column": "id", "transform": "DIRECT"}
@@ -215,9 +226,10 @@ def test_core_cli_catalog_prefixes_override_environment(tmp_path, monkeypatch) -
         str(output),
     ]) == 0
 
-    lineage = json.loads(
+    doc = json.loads(
         (output / "catalog" / "lineage.json").read_text(encoding="utf-8")
     )
+    lineage = next(iter(doc["statement_lineage"].values()))
     assert lineage["source_tables"] == ["ods.source"]
     assert os.environ["SCOPE_LINEAGE_CATALOG_PREFIXES"] == "environment_catalog"
 
@@ -247,12 +259,14 @@ def test_documented_example_corpus_is_executable(tmp_path) -> None:
     ]) == 0
 
     lineage_files = sorted(output.rglob("lineage.json"))
-    assert len(lineage_files) == 6
+    # One task document per task (the retired v1 mode wrote one per write statement,
+    # which made this 6: one example task holds two writes).
+    assert len(lineage_files) == 5
     assert all(
         json.loads(path.read_text(encoding="utf-8"))["parse_status"] == "ok"
         for path in lineage_files
     )
-    complex_example = json.loads(
+    complex_doc = json.loads(
         (
             output
             / "subscription"
@@ -260,6 +274,7 @@ def test_documented_example_corpus_is_executable(tmp_path) -> None:
             / "lineage.json"
         ).read_text(encoding="utf-8")
     )
+    complex_example = next(iter(complex_doc["statement_lineage"].values()))
     assert len(complex_example["source_tables"]) == 19
     assert len(complex_example["end_to_end_lineage"]) == 112
     assert complex_example["target_field_binding"]["status"] == "applied"
@@ -425,11 +440,12 @@ def test_select_star_example_expands_and_uses_target_binding(tmp_path) -> None:
         str(output),
     ]) == 0
 
-    lineage = json.loads(
+    doc = json.loads(
         (output / "select_star_with_schema" / "lineage.json").read_text(
             encoding="utf-8"
         )
     )
+    lineage = next(iter(doc["statement_lineage"].values()))
     assert lineage["target_field_binding"]["status"] == "applied"
     assert [item["column"] for item in lineage["end_to_end_lineage"]] == [
         "customer_id",
@@ -473,8 +489,10 @@ def test_compact_v1_writer_preserves_document_semantics(tmp_path) -> None:
         task_name="compact_v1",
         schema={"ods.source": ["id"]},
     )
-    pretty = scope_lineage.write_lineage(result, tmp_path / "pretty")
-    compact = scope_lineage.write_lineage(
+    from .statement_document import write_statement_documents
+
+    pretty = write_statement_documents(result, tmp_path / "pretty")
+    compact = write_statement_documents(
         result,
         tmp_path / "compact",
         compact=True,

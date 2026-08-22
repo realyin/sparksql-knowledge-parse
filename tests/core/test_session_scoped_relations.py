@@ -25,7 +25,7 @@ import json
 
 import pytest
 
-from scope_lineage.contract.lineage import write_lineage
+from .statement_document import write_statement_documents
 from scope_lineage.scope.scope_builder import parse_all_scope_lineage, parse_scope_lineage
 from scope_lineage.scope.task_lineage import parse_task_lineage
 
@@ -120,7 +120,7 @@ def test_the_marker_survives_serialization(tmp_path):
     result = parse_scope_lineage(
         "create or replace temp view tmp_v as select id, v from ods.real", "t", schema=SCHEMA
     )
-    write_lineage(result, str(tmp_path))
+    write_statement_documents(result, str(tmp_path))
     document = json.loads((tmp_path / "lineage.json").read_text(encoding="utf-8"))
 
     assert document["is_session_scoped_relation"] is True
@@ -129,7 +129,7 @@ def test_the_marker_survives_serialization(tmp_path):
 def test_a_persisting_relation_omits_the_key_entirely(tmp_path):
     """Absent and false mean the same thing; only true is serialized."""
     result = parse_scope_lineage("create table db.r as select id from ods.real", "t", schema=SCHEMA)
-    write_lineage(result, str(tmp_path))
+    write_statement_documents(result, str(tmp_path))
     document = json.loads((tmp_path / "lineage.json").read_text(encoding="utf-8"))
 
     assert "is_session_scoped_relation" not in document

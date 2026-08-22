@@ -1,0 +1,5 @@
+# Development constraint: pin the local sqlglot to a version the CI compat matrix
+# actually tests (ci.yml: 30.0.0 / 30.16.0 / 30.17.0). A dev environment on an
+# untested version can be green where CI is red, or the reverse. Update this pin
+# together with the matrix, never independently.
+sqlglot==30.17.0

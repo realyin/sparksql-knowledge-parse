@@ -27,6 +27,7 @@ from typing import Iterable
 DOC_FORMAT = "mapping-md/1"
 
 SUPPORTED_SCHEMA_VERSION = "1.0"
+TASK_SCHEMA_VERSION = "2.0"
 
 SECTION_ORDER = (
     "overview",
@@ -87,9 +88,24 @@ def render_mapping_markdown(
     expression under each step.
     """
     version = lineage_document.get("schema_version")
+    if (
+        version == TASK_SCHEMA_VERSION
+        and lineage_document.get("artifact_kind") == "task_lineage"
+    ):
+        # A task document is an ordered set of statement documents, each of which is
+        # exactly the v1 shape (the task contract reuses the same converter). Render
+        # one section per statement, in script order.
+        return _render_task_document(
+            lineage_document,
+            diagnostics_document,
+            fields=fields,
+            expanded=expanded,
+            sections=sections,
+        )
     if version != SUPPORTED_SCHEMA_VERSION:
         raise ValueError(
-            f"mapping renderer supports schema_version {SUPPORTED_SCHEMA_VERSION!r}; "
+            f"mapping renderer supports schema_version {SUPPORTED_SCHEMA_VERSION!r} "
+            f"statement documents and {TASK_SCHEMA_VERSION!r} task documents; "
             f"document declares {version!r}"
         )
     selected = _selected_sections(sections)
@@ -827,6 +843,45 @@ _WARNING_GLOSSES = {
 }
 
 WARNINGS_DOC_FORMAT = "warnings-md/1"
+
+
+def _render_task_document(
+    task_document: dict,
+    diagnostics_document: dict | None,
+    *,
+    fields: Iterable[str] | None,
+    expanded: bool,
+    sections: Iterable[str] | None,
+) -> str:
+    statement_lineage = task_document.get("statement_lineage") or {}
+    ordered_ids = [
+        str(statement.get("statement_id") or "")
+        for statement in task_document.get("statement_sequence") or []
+        if statement.get("statement_id") in statement_lineage
+    ]
+    # Entries no statement_sequence row points at still render, after the ordered ones.
+    ordered_ids.extend(sid for sid in statement_lineage if sid not in set(ordered_ids))
+
+    lines = [
+        f"# 任务字段映射：{task_document.get('task_id') or ''}",
+        "",
+        f"共 {len(ordered_ids)} 条写入语句；每节为一条语句的完整映射文档。",
+    ]
+    for statement_id in ordered_ids:
+        entry = statement_lineage.get(statement_id) or {}
+        lines.append("")
+        lines.append(f"## {statement_id}")
+        lines.append("")
+        lines.append(
+            render_mapping_markdown(
+                entry,
+                diagnostics_document,
+                fields=fields,
+                expanded=expanded,
+                sections=sections,
+            )
+        )
+    return "\n".join(lines)
 
 
 def render_warnings_markdown(

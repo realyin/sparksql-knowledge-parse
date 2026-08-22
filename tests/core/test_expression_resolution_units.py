@@ -19,7 +19,7 @@ from __future__ import annotations
 # Imported from the modules that define them, not from scope_builder's re-exports: those
 # re-exports exist only for the integration repository and are slated for removal once its
 # ledger is clear, and a Core test must not be what keeps them alive.
-from scope_lineage.scope._shared import _resolve_expression_resolution_from_output_sources
+from scope_lineage.scope.expression_expansion import _resolve_expression_resolution_from_output_sources
 from scope_lineage.scope.column_expression_resolution import (
     _expression_resolution_for_scope_column,
 )

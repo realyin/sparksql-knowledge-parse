@@ -25,21 +25,9 @@ from .scope_types import (
 # Leaf helpers come from `_shared`, never from the orchestrator: importing it back
 # formed a cycle that only worked because Python hands out a partially-initialised
 # module, making import order load-bearing (ARCH-001).
-from ._shared import (
-    _REGEX_COLUMN_METACHARACTERS,
-    _pivot_of_source_node,
-    _pivot_output_names,
-    _compiled_column_pattern,
-    _find_alias_in_parent,
-    _ORIGINALLY_UNQUALIFIED_META,
-    _SCOPE_ID_ATTR,
-    _inside_nested_query,
-    _selected_sources,
-    _source_item_from_ast_node,
-    _source_ref_binding_key,
-    _source_ref_for_source,
-    _source_scope_id,
-)
+from ._constants import _ORIGINALLY_UNQUALIFIED_META, _SCOPE_ID_ATTR
+from .source_refs import _source_ref_binding_key
+from .sqlglot_walk import _REGEX_COLUMN_METACHARACTERS, _compiled_column_pattern, _find_alias_in_parent, _inside_nested_set_op, _pivot_of_source_node, _pivot_output_names, _selected_sources, _source_item_from_ast_node, _source_ref_for_source, _source_scope_id
 
 
 def _resolve_column_refs_in_expr(expr: exp.Expression, sg_scope: Scope, result: ScopeLineageResult, schema: dict | None=None) -> List[SourceRef]:
@@ -51,7 +39,7 @@ def _resolve_column_refs_in_expr(expr: exp.Expression, sg_scope: Scope, result: 
     sources: list = []
     for col_ref in expr.find_all(exp.Column):
         scope_for_ref = sg_scope
-        if _inside_nested_query(col_ref, expr):
+        if _inside_nested_set_op(expr, col_ref):
             # The reference belongs to a nested query, so it must be resolved against that
             # query's own sources -- resolving it here would bind it to whatever the outer
             # scope happens to expose under the same alias (MERGE-ALIAS-001). Skipping it

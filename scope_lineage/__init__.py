@@ -10,7 +10,6 @@ from .contract import (
     validate_cross_references,
     validate_diagnostics_document,
     validate_lineage_document,
-    write_lineage,
     write_task_lineage,
 )
 from .contract.lineage import to_dict, to_json
@@ -24,11 +23,9 @@ from .metadata.schema_metadata import (
     catalog_prefixes,
     load_schema,
     load_schema_sources,
-    materialize_schema,
     metadata_dict_reader,
     normalize_schema_map,
     normalize_table_name,
-    table_details_for_table,
 )
 from .metadata.target_table_metadata import (
     TargetColumnMetadata,
@@ -37,8 +34,7 @@ from .metadata.target_table_metadata import (
     load_target_table_metadata,
     lookup_target_table_metadata,
 )
-from .scope._shared import extract_qualified_field_refs
-from .scope.end_to_end import build_end_to_end_lineage
+from .scope.expression_refs import extract_qualified_field_refs
 from .scope.parser import resolve_display_expression
 from .scope.scope_builder import (
     NoSupportedWriteStatementError,
@@ -62,25 +58,19 @@ from .scope.scope_types import (
     ScopeOutputField,
     SourceRef,
 )
-from .scope.sqlglot_config import suppress_invalid_json_path_warnings
+from .sqlglot_config import suppress_invalid_json_path_warnings
 from .scope.task_lineage import TaskLineageResult, parse_task_lineage
-from .scope.types import Column, ColumnRef, JoinKey, LineageResult, Unresolved
 from .contract.fold import fold_session_scoped
 from .render.mapping_markdown import render_mapping_markdown, render_warnings_markdown
-from .serialize.scope_profile import build_scope_profile
 
 
 PUBLIC_CORE_API = frozenset({
     "PUBLIC_CORE_API",
-    "Column",
-    "ColumnRef",
     "CONSTANT_SCOPE_ID",
     "DiagnosticWarning",
     "Diagnostics",
     "fold_session_scoped",
     "DictSchemaProvider",
-    "JoinKey",
-    "LineageResult",
     "MetadataFileError",
     "NoSupportedWriteStatementError",
     "NON_PHYSICAL_SOURCE_SCOPES",
@@ -101,9 +91,6 @@ PUBLIC_CORE_API = frozenset({
     "TargetMetadataMap",
     "TargetTableMetadata",
     "TaskLineageResult",
-    "Unresolved",
-    "build_end_to_end_lineage",
-    "build_scope_profile",
     "catalog_prefixes",
     "column_details_for_table",
     "check_metadata_file",
@@ -112,7 +99,6 @@ PUBLIC_CORE_API = frozenset({
     "load_schema_sources",
     "load_target_table_metadata",
     "lookup_target_table_metadata",
-    "materialize_schema",
     "metadata_dict_reader",
     "normalize_schema_map",
     "normalize_table_name",
@@ -123,7 +109,6 @@ PUBLIC_CORE_API = frozenset({
     "render_warnings_markdown",
     "resolve_display_expression",
     "suppress_invalid_json_path_warnings",
-    "table_details_for_table",
     "to_dict",
     "to_json",
     "to_lineage_dict",
@@ -133,7 +118,6 @@ PUBLIC_CORE_API = frozenset({
     "validate_diagnostics_document",
     "validate_cross_references",
     "validate_lineage_document",
-    "write_lineage",
     "write_task_lineage",
 })
 

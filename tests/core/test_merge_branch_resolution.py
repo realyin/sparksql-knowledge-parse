@@ -148,10 +148,10 @@ def test_a_matched_delete_still_says_matched_and_not_by_source():
 def test_every_surface_that_carries_the_branch_also_carries_the_qualifier(tmp_path):
     import json
 
-    from scope_lineage.contract.lineage import write_lineage
+    from .statement_document import write_statement_documents
 
     result = _run("WHEN NOT MATCHED BY SOURCE THEN UPDATE SET t.both = both + 1")
-    write_lineage(result, str(tmp_path))
+    write_statement_documents(result, str(tmp_path))
     doc = json.loads((tmp_path / "lineage.json").read_text())
 
     def carriers(node, path=""):

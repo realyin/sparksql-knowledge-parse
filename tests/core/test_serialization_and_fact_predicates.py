@@ -15,7 +15,7 @@ synthetic name that keeps the `app_` prefix the rule actually reads.
 from __future__ import annotations
 
 from scope_lineage import ScopeOutputField, SourceRef
-from scope_lineage.scope._shared import _source_ref_to_dict
+from scope_lineage.scope.source_refs import _source_ref_to_dict
 from scope_lineage.scope.end_to_end import _output_terminal_incomplete_reasons
 from scope_lineage.scope.scope_facts import _source_ref_from_dict
 

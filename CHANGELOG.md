@@ -1,6 +1,37 @@
 # Changelog
 
-## Unreleased
+## 0.2.0
+- **Breaking**: the task contract (2.0) is now the only output mode, and the standalone
+  contract-1.0 artifact is removed in the same release -- the planned deprecation window
+  collapsed when the sole downstream consumer confirmed its own retirement.
+  `write_lineage` is gone from the API; the CLI accepts `--contract-version 2.0` only
+  (the flag stays one release so a `1.0` request fails with a clear choices error). The
+  statement-document SHAPE is not retired: every `statement_lineage` entry keeps it,
+  `lineage.schema.json` / `diagnostics.schema.json` remain as its schemas, the converters
+  (`to_lineage_dict` / `to_lineage_json` / `to_dict` / `to_json`) stay public, and the
+  golden statement corpus now validates every embedded entry against that schema.
+- **Breaking**: removed four facade exports with no remaining consumer
+  (`build_end_to_end_lineage`, `build_scope_profile`, `materialize_schema`,
+  `table_details_for_table`) after the downstream consumer's retirement was confirmed.
+  Their implementations stay internal to the packages that own them.
+- `render` / `render_mapping_markdown` accept contract-2.0 task documents and render one
+  mapping section per statement, in `statement_sequence` order; a single statement
+  document still renders as before. Unknown schema versions are rejected.
+- **Breaking**: removed the v1-era result types `Column`, `ColumnRef`, `JoinKey`,
+  `LineageResult`, and `Unresolved` from the public API. Nothing inside the package, the test
+  suite, or the approved consumer surface referenced them; they predate `ScopeLineageResult`
+  and had no producer. Consumers of the current parser entry points are unaffected.
+- Fixed the internal-resolution pass rewriting settled outputs: a completed expansion
+  (resolved, physical fields present) is no longer mistaken for a damaged one, so the
+  fine-grained `scope_output_trace` provenance chain can never be collapsed by an extra
+  resolution round. Golden artifacts are byte-identical.
+- Internal restructuring, no artifact changes: the `_shared.py` grab-bag split into ten
+  themed modules; the fact pipeline expressed as four named phases with convergence loops
+  and a wiring guard test; a package dependency-direction architecture test now runs in CI;
+  the `expression_resolution` payload is typed (`fact_protocols.py`) with a non-blocking
+  pyright job. Deep imports of `scope_lineage.scope._shared`, `scope.types`, or
+  `scope.sqlglot_config` (now `scope_lineage.sqlglot_config`) no longer resolve -- the
+  supported surface remains the package facade.
 - The task contract no longer strips column types and comments while handing its schema to
   per-statement parsing. `SchemaMap` carries them on an attribute, and a `dict()` copy kept
   the keys while silently dropping it, so every nested statement in a v2 artifact reported
@@ -19,10 +50,10 @@
   did. Previously a two-write script came back as the first write's document with nothing
   recorded -- undeclared data loss on a public API symbol.
 - **Behavior change (CI exit codes):** an unexpanded `SELECT *` on ROOT is now a
-  root-impact `projection_wildcard_unexpanded` fact gap under contract 1.0 -- the same gap
-  type v2 always emitted for the same condition. Pipelines gating on `--fail-on-root-gap`
-  or `--quality-policy strict` that previously passed such artifacts now fail them; that
-  is what those flags are for. The permissive default still exits zero.
+  root-impact `projection_wildcard_unexpanded` fact gap in the statement document -- the
+  same gap type the task level always emitted for the same condition. Pipelines gating on
+  `--fail-on-root-gap` or `--quality-policy strict` that previously passed such artifacts
+  now fail them; that is what those flags are for. The permissive default still exits zero.
 - Self-joins keep their two sides apart in `join_relation_detail`: `left_alias` and
   `right_alias` no longer collapse onto the later alias, and equality conjuncts whose two
   refs resolve to the same table become `join_key_pairs` oriented by qualifier instead of

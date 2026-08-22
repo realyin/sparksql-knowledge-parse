@@ -14,7 +14,7 @@ The fixtures arrived synthetic and were left that way.
 
 from __future__ import annotations
 
-from scope_lineage.scope._shared import _populate_union_output_branch_mappings
+from scope_lineage.scope.star_passthrough import _populate_union_output_branch_mappings
 from scope_lineage.scope.lineage_fact_gaps import _populate_lineage_fact_gaps
 from scope_lineage.scope.scope_types import (
     Diagnostics,
