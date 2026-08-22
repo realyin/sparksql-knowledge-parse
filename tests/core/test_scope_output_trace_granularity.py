@@ -44,3 +44,29 @@ def test_merge_root_outputs_keep_the_two_step_provenance_chain() -> None:
         "the merge case no longer produces fine-grained ROOT traces at all -- "
         "either the fixture changed or the pipeline collapsed them"
     )
+
+
+def test_generated_output_keeps_its_two_step_trace_and_unwrapped_expression() -> None:
+    """One extra internal-resolution run after the pipeline tail rebuilds a settled
+    generated (literal) output -- collapsing its two scope_projection steps into one
+    coarse record and wrapping the expression in parentheses. Found by old-vs-new
+    differential comparison (2026-08-23), not by the golden corpus, which lacks a
+    generated UNION output. The pipeline tail's truncation is load-bearing here."""
+    from pathlib import Path
+
+    sql = (
+        Path(__file__).resolve().parents[2] / "examples" / "sql" / "order_channel_metrics.sql"
+    ).read_text(encoding="utf-8")
+    result = parse_scope_lineage(sql, "order_channel_metrics")
+
+    output = next(o for o in result.scopes["ROOT"].outputs if o.name == "order_channel")
+    resolution = output.expression_resolution
+    assert resolution.get("source_kind") == "generated"
+    assert output.expanded_expression == "UNION_BRANCHES('APP' || 'WEB')", (
+        "expression gained a rebuild wrapper: " + str(output.expanded_expression)
+    )
+    trace = resolution.get("scope_output_trace") or []
+    assert [step.get("relation") for step in trace] == [
+        "scope_projection",
+        "scope_projection",
+    ], f"generated output's provenance chain collapsed: {trace}"

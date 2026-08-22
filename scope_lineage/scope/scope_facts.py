@@ -40,12 +40,12 @@ from .passthrough_resolution import _propagate_passthrough_expression_resolution
 from .logic_block import _populate_logic_blocks  # noqa: F401
 
 
-# Both resolution segments used to be hand-unrolled (P I O, P I O, P I before the detail
-# refreshes; P I, P I, P O after). Full rounds run to a fixed point were verified
-# byte-identical on the whole golden corpus across the sqlglot compat matrix -- the tail
-# unification only became safe once the internal pass turned idempotent on settled
-# outputs. Floor of 3 keeps at least the unrolled coverage even if the fingerprint ever
-# misses a mutated field; ceiling per the governance plan (WI-09).
+# The FRONT resolution segment used to be hand-unrolled (P I O, P I O, P I); full
+# rounds run to a fixed point were verified byte-identical on the golden corpus, the
+# sqlglot compat matrix, and an old-vs-new differential over the example corpus. The
+# tail segment after the detail refreshes is deliberately NOT this loop -- see the
+# comment there. Floor of 3 keeps at least the unrolled coverage even if the
+# fingerprint ever misses a mutated field; ceiling per the governance plan (WI-09).
 _RESOLUTION_MIN_ROUNDS = 3
 _RESOLUTION_MAX_ROUNDS = 6
 
@@ -102,11 +102,19 @@ def _populate_enhanced_scope_facts(
     _populate_structural_facts(result, all_scopes, schema)
     _run_resolution_rounds(result)
     _refresh_detail_resolutions(result)
-    # A second convergence segment, not a repeat by accident: the refresh passes above
-    # rewrite aggregate/window resolutions, and the rounds must settle again afterwards.
-    # Safe as a loop only since the internal pass became idempotent on settled outputs
-    # (see _should_rebuild_internal_expansion_from_expression).
-    _run_resolution_rounds(result)
+    # The tail segment is NOT the convergence loop, and its exact truncation is
+    # load-bearing: the internal pass is not idempotent on settled outputs (see the
+    # comment at _should_rebuild_internal_expansion_from_expression), so one extra run
+    # after the final output-sources call rewrites settled resolutions -- collapsing a
+    # generated output's two-step scope_projection chain and re-wrapping expressions.
+    # Proven by old-vs-new differential comparison over the example corpus (2026-08-23);
+    # the sentinels in test_scope_output_trace_granularity stand on this ordering.
+    _propagate_passthrough_expression_resolution(result)
+    _resolve_internal_scope_expression_resolution(result)
+    _propagate_passthrough_expression_resolution(result)
+    _resolve_internal_scope_expression_resolution(result)
+    _propagate_passthrough_expression_resolution(result)
+    _resolve_expression_resolution_from_output_sources(result)
     _finalize_facts(result, schema)
 
 
@@ -2448,17 +2456,14 @@ def _should_rebuild_internal_expansion_from_expression(
         for qualifier, field in internal_refs
     )
     # Absent internal refs are ambiguous: expansion may have mangled the text, or it may
-    # have FINISHED -- replaced every internal ref with its physical fields. Rebuilding in
-    # the second case is what made this pass non-idempotent: it clobbered source_scope_id
-    # and the refined resolution, and the provenance trace built later collapsed to one
-    # coarse record (WI-09 root cause; the idempotence test and the WI-08 sentinel both
-    # stand on this line). A completed expansion is recognizable and exempt.
-    expansion_completed = (
-        str(current_resolution.get("status") or "") == "resolved"
-        and bool(current_resolution.get("physical_source_fields"))
-        and not has_unexpanded_alias_reason
-    )
-    return has_unexpanded_alias_reason or (lost_original_internal_refs and not expansion_completed)
+    # have FINISHED -- replaced every internal ref with its physical or generated leaves.
+    # Rebuilding in the second case is why the whole pass is NOT idempotent, and why the
+    # pipeline tail's truncation is load-bearing (WI-09 root cause). An exemption for
+    # settled resolutions was tried and REVERTED: it also fires mid-pipeline, where the
+    # old sequence deliberately rebuilt (differential comparison 2026-08-23 showed a
+    # trace-step expression changing), so the protection lives in the pipeline ordering
+    # and its sentinels, not here.
+    return has_unexpanded_alias_reason or lost_original_internal_refs
 
 
 def _qualified_ref_present(expression: str, qualifier: str, field: str) -> bool:
