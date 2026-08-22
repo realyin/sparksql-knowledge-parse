@@ -52,6 +52,55 @@ allowed to be blind.
 Keep Core domain-neutral. Warehouse layer names, business-domain rules, report builders, and
 modeling recommendations belong in downstream projects rather than this package.
 
+## Architecture rules (each enforced by a test)
+
+- **Package dependency direction is locked** -- `cli -> contract -> (serialize, scope) ->
+  metadata`; `render` consumes contract JSON dicts only. A new cross-package edge is an
+  architecture decision: extend the allowed set or whitelist in
+  `tests/architecture/test_dependency_direction.py` with a written reason, or do not
+  create the edge.
+- **No grab-bag modules.** Shared scope code goes into the themed module that owns its
+  concept; a helper with one caller sinks into that caller; a revived `_shared.py` fails
+  its tombstone test. Never export a public symbol from a `_`-prefixed module.
+- **A new fact pass joins a named phase** of `_populate_enhanced_scope_facts`; the wiring
+  guard (`tests/core/test_fact_pipeline_wiring.py`) fails on a pass that is defined but
+  not reachable. The pipeline tail's exact truncation is load-bearing -- the
+  internal-resolution pass is not idempotent (documented at
+  `_should_rebuild_internal_expansion_from_expression`); the provenance sentinels stand
+  on that ordering.
+- **Pass payloads are typed** in `scope/fact_protocols.py`; a pass emitting an
+  undeclared `expression_resolution` key fails the corpus-coverage test.
+
+## Verification hierarchy
+
+1. A green suite is necessary, not sufficient: every CLI capability needs at least one
+   end-to-end test of its real chain, and a library capability is not done until the CLI
+   that should expose it is wired and tested.
+2. A behavior-neutral claim requires the differential harness (above), not an argument;
+   equivalence claims must not outrun their evidence.
+3. Establish premises by experiment, not by reading -- when a refactor rests on a claim
+   about behavior, test the claim first.
+4. CI must actually run what you wrote: the test job enumerates paths explicitly, so a
+   new test directory must be added to `.github/workflows/ci.yml`, and a new guard is
+   trusted only after you have watched it fail on an injected violation.
+
+## Merge and release
+
+- Before merging, fetch and confirm `main` has not advanced past your branch point; if
+  it has, merge it in and re-run the full verification (suite, matrix, differential).
+- Never enable auto-merge (without required checks it bypasses CI); wait for green, then
+  squash-merge with subject `<type>: <summary> (#PR)`.
+- Release order: bump `pyproject.toml` + retitle CHANGELOG -> PR -> CI green -> merge ->
+  `gh release create vX.Y.Z --target main` (the workflow rejects a tag that does not
+  match the package version) -> the release workflow publishes to PyPI. Breaking changes
+  ship only in minor bumps, each with a **Breaking** CHANGELOG entry and a migration
+  section in both READMEs.
+- Before pushing, opening a PR, or writing release notes, scan every text that will
+  become public -- commit messages and PR bodies included -- for private corpus names,
+  sizes, and measurement figures; published sdists cannot be edited afterwards. Keep
+  proportions, drop absolutes; cite local verification notes instead of restating
+  numbers.
+
 ## Pull Request Checklist
 
 - Add or update tests for parser behavior.
