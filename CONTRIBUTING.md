@@ -10,10 +10,21 @@ when the SQL is ambiguous.
 ## Development
 
 ```bash
-python -m pip install -e ".[dev]"     # editable install with pytest/jsonschema/build
+python -m pip install -e ".[dev]" -c constraints-dev.txt   # pins sqlglot to a CI-matrix version
 python -m pytest -q tests/core
 python -m pytest tests/core/test_lineage_contract_baseline.py -q
 git diff --check                       # whitespace/conflict check after edits
+```
+
+Before landing any change that re-records a golden baseline, rebase on the latest `main` and
+run the suite once per CI compat-matrix sqlglot version -- a baseline recorded against one
+version can silently disagree with the others:
+
+```bash
+for v in 30.0.0 30.16.0 30.17.0; do
+  pip install -q "sqlglot==$v" && python -m pytest -q || break
+done
+pip install -q -c constraints-dev.txt sqlglot   # restore the dev pin afterwards
 ```
 
 Keep Core domain-neutral. Warehouse layer names, business-domain rules, report builders, and
