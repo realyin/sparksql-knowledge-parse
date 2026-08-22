@@ -1,25 +1,22 @@
 # Changelog
 
 ## Unreleased
-- **Breaking**: the standalone contract-1.0 output mode is removed. `write_lineage` is
-  gone from the API; the CLI accepts `--contract-version 2.0` only (the flag stays one
-  release so a `1.0` request fails with a clear choices error). The statement-document
-  SHAPE is not retired: every `statement_lineage` entry keeps it, `lineage.schema.json` /
-  `diagnostics.schema.json` remain as its schemas, the converters
+- **Breaking**: the task contract (2.0) is now the only output mode, and the standalone
+  contract-1.0 artifact is removed in the same release -- the planned deprecation window
+  collapsed when the sole downstream consumer confirmed its own retirement.
+  `write_lineage` is gone from the API; the CLI accepts `--contract-version 2.0` only
+  (the flag stays one release so a `1.0` request fails with a clear choices error). The
+  statement-document SHAPE is not retired: every `statement_lineage` entry keeps it,
+  `lineage.schema.json` / `diagnostics.schema.json` remain as its schemas, the converters
   (`to_lineage_dict` / `to_lineage_json` / `to_dict` / `to_json`) stay public, and the
   golden statement corpus now validates every embedded entry against that schema.
 - **Breaking**: removed four facade exports with no remaining consumer
   (`build_end_to_end_lineage`, `build_scope_profile`, `materialize_schema`,
   `table_details_for_table`) after the downstream consumer's retirement was confirmed.
   Their implementations stay internal to the packages that own them.
-- **Breaking**: `--contract-version` now defaults to `2.0`. Contract 1.0 (one artifact per
-  projection write) still works when requested explicitly, prints a deprecation notice, and
-  is scheduled for removal one minor release later; the library writer `write_lineage`
-  emits a `DeprecationWarning`. The statement converter `to_lineage_dict` is NOT
-  deprecated -- the task contract builds its `statement_lineage` entries through it.
 - `render` / `render_mapping_markdown` accept contract-2.0 task documents and render one
-  mapping section per statement, in `statement_sequence` order. Unknown schema versions
-  are still rejected.
+  mapping section per statement, in `statement_sequence` order; a single statement
+  document still renders as before. Unknown schema versions are rejected.
 - **Breaking**: removed the v1-era result types `Column`, `ColumnRef`, `JoinKey`,
   `LineageResult`, and `Unresolved` from the public API. Nothing inside the package, the test
   suite, or the approved consumer surface referenced them; they predate `ScopeLineageResult`
