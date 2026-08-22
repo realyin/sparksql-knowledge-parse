@@ -40,6 +40,54 @@ from .passthrough_resolution import _propagate_passthrough_expression_resolution
 from .logic_block import _populate_logic_blocks  # noqa: F401
 
 
+# The front resolution segment used to be hand-unrolled (P I O, P I O, P I). Replacing it
+# with full rounds run to a fixed point was verified equivalent on the whole golden corpus
+# and the sqlglot compat matrix; the tail segment after the refresh passes is NOT a loop --
+# see the comment there. Floor of 3 keeps at least the unrolled coverage even if the
+# fingerprint ever misses a mutated field; ceiling per the governance plan (WI-09).
+_RESOLUTION_MIN_ROUNDS = 3
+_RESOLUTION_MAX_ROUNDS = 6
+
+
+def _resolution_fingerprint(result: ScopeLineageResult) -> int:
+    """Cheap stability probe over every field the three resolution passes mutate."""
+    return hash(tuple(
+        (
+            scope_id,
+            output.name,
+            output.expanded_expression,
+            output.expansion_status,
+            repr(output.expression_resolution),
+            repr(output.unexpanded_refs),
+            repr(output.sources),
+        )
+        for scope_id, scope_data in result.scopes.items()
+        for output in scope_data.outputs
+    ))
+
+
+def _run_front_resolution_rounds(result: ScopeLineageResult) -> None:
+    fingerprint = _resolution_fingerprint(result)
+    for round_index in range(_RESOLUTION_MAX_ROUNDS):
+        _propagate_passthrough_expression_resolution(result)
+        _resolve_internal_scope_expression_resolution(result)
+        _resolve_expression_resolution_from_output_sources(result)
+        next_fingerprint = _resolution_fingerprint(result)
+        if round_index + 1 >= _RESOLUTION_MIN_ROUNDS and next_fingerprint == fingerprint:
+            return
+        fingerprint = next_fingerprint
+    # Still changing at the ceiling: record it the way expansion_status records its budget --
+    # the artifact stays valid, the consumer learns the resolution text may not be final.
+    result.diagnostics.warnings.append(DiagnosticWarning(
+        type="resolution_rounds_exhausted",
+        scope="TASK",
+        msg=(
+            "expression resolution was still changing after "
+            f"{_RESOLUTION_MAX_ROUNDS} rounds; resolutions may be incomplete"
+        ),
+    ))
+
+
 def _populate_enhanced_scope_facts(
     result: ScopeLineageResult,
     all_scopes: list[Scope],
@@ -65,14 +113,7 @@ def _populate_enhanced_scope_facts(
     _populate_scope_outputs(result)
     _populate_scope_field_usage(result, schema)
     _populate_final_targets(result)
-    _propagate_passthrough_expression_resolution(result)
-    _resolve_internal_scope_expression_resolution(result)
-    _resolve_expression_resolution_from_output_sources(result)
-    _propagate_passthrough_expression_resolution(result)
-    _resolve_internal_scope_expression_resolution(result)
-    _resolve_expression_resolution_from_output_sources(result)
-    _propagate_passthrough_expression_resolution(result)
-    _resolve_internal_scope_expression_resolution(result)
+    _run_front_resolution_rounds(result)
     _refresh_aggregation_detail_expression_resolution(result)
     _refresh_window_detail_expression_resolution(result)
     _refresh_window_output_expression_resolutions(result)
