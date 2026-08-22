@@ -24,12 +24,12 @@ from .scope_types import (
 from sqlglot.errors import OptimizeError
 
 
-DIALECT = "spark"
-
-PARSE_OPTS = {"error_level": ErrorLevel.IGNORE}
-
-_SCOPE_ID_ATTR = "_lineage_scope_id"
-_ORIGINALLY_UNQUALIFIED_META = "lineage_originally_unqualified"
+from ._constants import (  # noqa: F401 -- transitional re-export until WI-06 repoints importers
+    DIALECT,
+    PARSE_OPTS,
+    _ORIGINALLY_UNQUALIFIED_META,
+    _SCOPE_ID_ATTR,
+)
 
 def _source_type_from_id(source_id: str) -> str:
     # AMBIGUOUS has no colon, so without this it classified as a physical table and downstream
