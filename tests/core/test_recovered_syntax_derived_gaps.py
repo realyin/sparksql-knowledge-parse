@@ -96,10 +96,10 @@ def test_task_lineage_leaves_a_clean_script_unmarked():
 
 
 def test_marker_survives_serialization(tmp_path):
-    from scope_lineage.contract.lineage import write_lineage
+    from .statement_document import write_statement_documents
 
     result = parse_scope_lineage(TRUNCATING_SQL, task_name="t", schema=SCHEMA)
-    write_lineage(result, str(tmp_path))
+    write_statement_documents(result, str(tmp_path))
 
     import json
 

@@ -6,14 +6,14 @@ import argparse
 import json
 import os
 import sys
+import traceback
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
-from .contract import write_lineage, write_task_lineage
+from .contract import write_task_lineage
 from .metadata.schema_metadata import load_schema, load_schema_sources
 from .metadata.target_table_metadata import load_target_table_metadata
-from .scope.scope_builder import parse_all_scope_lineage
 from .scope.task_lineage import parse_task_lineage
 
 
@@ -84,11 +84,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     parse_cmd.add_argument(
         "--contract-version",
-        choices=("1.0", "2.0"),
-        default="1.0",
+        choices=("2.0",),
+        default="2.0",
         help=(
-            "Output contract: 1.0 keeps one artifact per projection write; "
-            "2.0 emits one task-level ordered table-state artifact"
+            "Output contract: 2.0, one task-level ordered table-state artifact. "
+            "Contract 1.0 was removed after its deprecation window; the flag stays "
+            "one release so a 1.0 request fails with this message instead of an "
+            "unknown-argument error"
         ),
     )
     parse_cmd.add_argument(
@@ -167,13 +169,6 @@ def main(argv: list[str] | None = None) -> int:
                     "--partition-overwrite-mode must be static or dynamic, got "
                     f"{args.partition_overwrite_mode!r}"
                 )
-            if args.contract_version != "2.0":
-                # Contract 1.0 models no overwrite effect at all, so the value would be
-                # silently inert. Erroring matches how the CLI rejects other
-                # incompatible flag pairs.
-                parser.error(
-                    "--partition-overwrite-mode requires --contract-version 2.0"
-                )
         with _catalog_prefix_override(args.catalog_prefixes):
             return _parse_inputs(args)
     if args.command == "render":
@@ -185,6 +180,7 @@ def main(argv: list[str] | None = None) -> int:
 def _render_inputs(args: argparse.Namespace) -> int:
     from .render.mapping_markdown import (
         SUPPORTED_SCHEMA_VERSION,
+        TASK_SCHEMA_VERSION,
         render_mapping_markdown,
         render_warnings_markdown,
     )
@@ -205,20 +201,26 @@ def _render_inputs(args: argparse.Namespace) -> int:
 
     sections = args.sections.split(",") if args.sections else None
     rendered = 0
-    skipped_v2 = 0
+    skipped_unknown_version = 0
     missing_diagnostics = 0
     for lineage_path in documents:
         document = json.loads(lineage_path.read_text(encoding="utf-8"))
-        if document.get("schema_version") != SUPPORTED_SCHEMA_VERSION:
+        version = document.get("schema_version")
+        renderable = version == SUPPORTED_SCHEMA_VERSION or (
+            version == TASK_SCHEMA_VERSION
+            and document.get("artifact_kind") == "task_lineage"
+        )
+        if not renderable:
             if root.is_file():
                 print(
                     "mapping renderer supports schema_version "
-                    f"{SUPPORTED_SCHEMA_VERSION}; {lineage_path} declares "
-                    f"{document.get('schema_version')!r}",
+                    f"{SUPPORTED_SCHEMA_VERSION} statement documents and "
+                    f"{TASK_SCHEMA_VERSION} task documents; {lineage_path} declares "
+                    f"{version!r}",
                     file=sys.stderr,
                 )
                 return 1
-            skipped_v2 += 1
+            skipped_unknown_version += 1
             continue
         diagnostics_path = lineage_path.parent / "diagnostics.json"
         diagnostics = None
@@ -250,7 +252,8 @@ def _render_inputs(args: argparse.Namespace) -> int:
 
     print(
         f"Rendered {rendered} mapping document(s) "
-        f"(skipped_v2={skipped_v2}, missing_diagnostics={missing_diagnostics})"
+        f"(skipped_unknown_version={skipped_unknown_version}, "
+        f"missing_diagnostics={missing_diagnostics})"
     )
     return 0
 
@@ -305,95 +308,14 @@ def _parse_inputs(args: argparse.Namespace) -> int:
     )
     out_root = Path(args.out)
     source_paths, input_root = _source_paths(args)
-    if args.contract_version == "2.0":
-        return _parse_task_inputs_v2(
-            args,
-            schema=schema,
-            target_metadata=target_metadata,
-            out_root=out_root,
-            source_paths=source_paths,
-            input_root=input_root,
-        )
-    result_count = 0
-    failed_count = 0
-    input_failed_count = 0
-    unsupported_mutation_count = 0
-    root_gap_result_count = 0
-    binding_fallback_count = 0
-    recovered_syntax_count = 0
-    claimed_output_dirs: dict[Path, Path] = {}
-
-    for source_path in source_paths:
-        try:
-            task = _load_task_input(source_path, input_root, args.task_name)
-            results = parse_all_scope_lineage(
-                task.sql,
-                task_name=task.task_name,
-                schema=schema,
-                target_metadata=target_metadata,
-            )
-            if results:
-                unsupported_mutation_count += sum(
-                    1
-                    for item in results[0].skipped_statements
-                    if item.get("category") == "row_mutation"
-                )
-            for result in results:
-                result.task_dependencies = task.task_dependencies
-                task_out = (
-                    out_root
-                    / task.relative_parent
-                    / result.task_id.replace("#", "_")
-                )
-                claimed_by = claimed_output_dirs.get(task_out)
-                if claimed_by is not None and claimed_by != source_path:
-                    raise ValueError(
-                        f"output directory collision: {task_out} is already used by "
-                        f"{claimed_by}"
-                    )
-                claimed_output_dirs[task_out] = source_path
-                write_lineage(result, task_out, compact=args.compact_json)
-                result_count += 1
-                if result.parse_status == "failed":
-                    failed_count += 1
-                    _print_parse_failure(result)
-                if any(
-                    gap.get("root_impact")
-                    for gap in result.diagnostics.lineage_fact_gaps
-                    if isinstance(gap, dict)
-                ):
-                    root_gap_result_count += 1
-                if result.target_field_binding.get("status") == "fallback":
-                    binding_fallback_count += 1
-                if result.syntax_status == "recovered":
-                    recovered_syntax_count += 1
-        except Exception as exc:
-            input_failed_count += 1
-            print(f"  FAILED {source_path}: {type(exc).__name__}: {exc}", file=sys.stderr)
-
-    print(
-        f"Parsed {result_count} statement(s) from {len(source_paths)} input(s) "
-        f"into {out_root} "
-        f"(ok={result_count - failed_count}, failed={failed_count}, "
-        f"input_failed={input_failed_count}, "
-        f"unsupported_mutations={unsupported_mutation_count}, "
-        f"root_gap_results={root_gap_result_count}, "
-        f"binding_fallbacks={binding_fallback_count}, "
-        f"recovered_syntax={recovered_syntax_count})"
-    )
-    quality_failed = _quality_gate_failed(
+    return _parse_task_inputs_v2(
         args,
-        unsupported_mutation_count=unsupported_mutation_count,
-        root_gap_result_count=root_gap_result_count,
-        binding_fallback_count=binding_fallback_count,
-        recovered_syntax_count=recovered_syntax_count,
+        schema=schema,
+        target_metadata=target_metadata,
+        out_root=out_root,
+        source_paths=source_paths,
+        input_root=input_root,
     )
-    if not failed_count and not input_failed_count and not quality_failed:
-        return 0
-    if quality_failed:
-        return 1
-    return 0 if args.allow_partial else 1
-
 
 def _parse_task_inputs_v2(
     args: argparse.Namespace,
@@ -471,12 +393,14 @@ def _parse_task_inputs_v2(
                 for lineage in result.statement_lineage.values()
             )
             recovered_syntax_count += result.syntax_status == "recovered"
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - batch boundary: one bad input must not kill the run; type+traceback go to stderr
             input_failed_count += 1
             print(
                 f"  FAILED {source_path}: {type(exc).__name__}: {exc}",
                 file=sys.stderr,
             )
+            # The traceback is what separates a Core bug from a bad input file.
+            print(traceback.format_exc().rstrip(), file=sys.stderr)
 
     print(
         f"Parsed {statement_count} statement(s) from {len(source_paths)} input(s) "

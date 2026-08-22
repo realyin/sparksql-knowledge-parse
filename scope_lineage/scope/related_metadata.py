@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Iterable, Mapping
 
-from .schema_metadata import column_details_for_table, normalize_table_name, table_details_for_table
-from ..scope.scope_types import (
+from ..metadata.schema_metadata import column_details_for_table, normalize_table_name, table_details_for_table
+from .scope_types import (
     CONSTANT_SCOPE_ID,
     SYSTEM_SCOPE_ID,
     ScopeLineageResult,

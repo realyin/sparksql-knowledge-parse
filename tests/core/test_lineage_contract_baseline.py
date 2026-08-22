@@ -12,7 +12,7 @@ from scope_lineage.metadata.target_table_metadata import (
     TargetMetadataMap,
     TargetTableMetadata,
 )
-from scope_lineage.contract import write_lineage
+from .statement_document import write_statement_documents
 from scope_lineage.scope.scope_builder import parse_scope_lineage
 from scope_lineage.scope.scope_types import ScopeGraphEdge
 
@@ -44,7 +44,7 @@ def _render(case_dir: Path, output_dir: Path) -> None:
         schema=case.get("schema"),
         target_metadata=_target_metadata(case.get("target_metadata")),
     )
-    write_lineage(result, output_dir)
+    write_statement_documents(result, output_dir)
 
 
 def _golden_bytes(path: Path) -> bytes:
@@ -104,7 +104,7 @@ def test_pure_writer_rejects_dangling_scope_before_contract_files_exist(
     output_dir = tmp_path / "invalid"
 
     with pytest.raises(ValueError, match="Cross-reference validation failed"):
-        write_lineage(result, output_dir)
+        write_statement_documents(result, output_dir)
 
     assert not (output_dir / "lineage.json").exists()
     assert not (output_dir / "diagnostics.json").exists()

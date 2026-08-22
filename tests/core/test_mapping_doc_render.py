@@ -8,7 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from scope_lineage.contract import to_lineage_dict, write_lineage
+from scope_lineage.contract import to_lineage_dict
+
+from .statement_document import write_statement_documents
 from scope_lineage.render.mapping_markdown import (
     DOC_FORMAT,
     FIELD_ID_SPAN_PATTERN,
@@ -69,7 +71,7 @@ def _document(sql: str, task_id: str = "case_task", schema=None) -> dict:
 
 def _documents_with_diagnostics(sql: str, tmp_path: Path, schema=None) -> tuple[dict, dict]:
     result = parse_scope_lineage(sql, "case_task", schema=schema)
-    write_lineage(result, tmp_path / "artifacts")
+    write_statement_documents(result, tmp_path / "artifacts")
     lineage = json.loads((tmp_path / "artifacts" / "lineage.json").read_text(encoding="utf-8"))
     diagnostics = json.loads(
         (tmp_path / "artifacts" / "diagnostics.json").read_text(encoding="utf-8")
@@ -92,11 +94,36 @@ def _front_matter(rendered: str) -> dict:
 # ---------------------------------------------------------------- entry contract
 
 
-def test_rejects_non_v1_documents() -> None:
+def test_rejects_unknown_schema_versions() -> None:
     document = _document("INSERT INTO mart.t SELECT id FROM ods.users")
-    document["schema_version"] = "2.0"
-    with pytest.raises(ValueError, match="2.0"):
+    document["schema_version"] = "3.0"
+    with pytest.raises(ValueError, match="3.0"):
         render_mapping_markdown(document)
+
+
+def test_renders_a_v2_task_document_one_section_per_statement() -> None:
+    import json
+    from pathlib import Path
+
+    task_doc = json.loads(
+        (
+            Path(__file__).parent
+            / "fixtures"
+            / "task_lineage_contract"
+            / "merge_cte_source"
+            / "lineage.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert task_doc["schema_version"] == "2.0"
+
+    rendered = render_mapping_markdown(task_doc)
+
+    for statement in task_doc["statement_sequence"]:
+        statement_id = statement["statement_id"]
+        assert statement_id in rendered, f"statement {statement_id} missing from render"
+        entry = task_doc["statement_lineage"][statement_id]
+        # Each statement section is the v1 render of its entry.
+        assert render_mapping_markdown(entry) in rendered
 
 
 def test_renders_twice_byte_identical() -> None:
@@ -604,7 +631,7 @@ def test_sections_filter_drops_unlisted_sections() -> None:
 
 def _write_artifacts(sql: str, out_dir: Path, schema=None) -> Path:
     result = parse_scope_lineage(sql, out_dir.name, schema=schema)
-    write_lineage(result, out_dir)
+    write_statement_documents(result, out_dir)
     return out_dir
 
 
@@ -635,7 +662,7 @@ def test_cli_render_writes_warnings_doc_for_warning_bearing_tasks(tmp_path: Path
     assert "star_not_expanded" in warnings_doc
 
 
-def test_cli_render_directory_recurses_and_skips_v2(tmp_path: Path, capsys) -> None:
+def test_cli_render_directory_recurses_and_skips_unknown_documents(tmp_path: Path, capsys) -> None:
     from scope_lineage.cli import main
 
     corpus = tmp_path / "corpus"
@@ -644,16 +671,17 @@ def test_cli_render_directory_recurses_and_skips_v2(tmp_path: Path, capsys) -> N
         corpus / "nested" / "task_a",
         schema={"ods.users": ["id"]},
     )
-    v2_dir = corpus / "task_v2"
-    v2_dir.mkdir(parents=True)
-    (v2_dir / "lineage.json").write_text(
+    # A 2.0 file without artifact_kind is not a task document -- unknown, skipped.
+    unknown_dir = corpus / "task_unknown"
+    unknown_dir.mkdir(parents=True)
+    (unknown_dir / "lineage.json").write_text(
         json.dumps({"schema_version": "2.0"}), encoding="utf-8"
     )
 
     assert main(["render", "--lineage", str(corpus)]) == 0
     assert (corpus / "nested" / "task_a" / "mapping.md").exists()
-    assert not (v2_dir / "mapping.md").exists()
-    assert "skipped_v2=1" in capsys.readouterr().out
+    assert not (unknown_dir / "mapping.md").exists()
+    assert "skipped_unknown_version=1" in capsys.readouterr().out
 
 
 def test_cli_render_out_mirrors_input_tree(tmp_path: Path) -> None:
@@ -671,13 +699,13 @@ def test_cli_render_out_mirrors_input_tree(tmp_path: Path) -> None:
     assert not (corpus / "nested" / "task_a" / "mapping.md").exists()
 
 
-def test_cli_render_rejects_v2_single_file(tmp_path: Path, capsys) -> None:
+def test_cli_render_rejects_unknown_schema_versions(tmp_path: Path, capsys) -> None:
     from scope_lineage.cli import main
 
-    v2 = tmp_path / "lineage.json"
-    v2.write_text(json.dumps({"schema_version": "2.0"}), encoding="utf-8")
-    assert main(["render", "--lineage", str(v2)]) == 1
-    assert "2.0" in capsys.readouterr().err
+    unknown = tmp_path / "lineage.json"
+    unknown.write_text(json.dumps({"schema_version": "3.0"}), encoding="utf-8")
+    assert main(["render", "--lineage", str(unknown)]) == 1
+    assert "3.0" in capsys.readouterr().err
 
 
 def test_cli_render_field_and_sections_options(tmp_path: Path) -> None:
@@ -712,3 +740,21 @@ def test_expanded_flag_adds_expanded_expression_lines() -> None:
     expanded = render_mapping_markdown(document, expanded=True)
     assert "展开表达式：" not in plain
     assert "展开表达式：" in expanded
+
+
+def test_render_cli_renders_task_documents(tmp_path):
+    """The parse default emits task documents; the render subcommand must render them
+    (it silently skipped every non-1.0 file, which after the v1 retirement meant it
+    rendered nothing at all -- caught by local end-to-end verification)."""
+    from scope_lineage.cli import main
+
+    sql_path = tmp_path / "demo.sql"
+    sql_path.write_text("INSERT INTO mart.t SELECT id FROM ods.source", encoding="utf-8")
+    out = tmp_path / "artifacts"
+    assert main(["parse", "--sql-file", str(sql_path), "--out", str(out)]) == 0
+
+    assert main(["render", "--lineage", str(out)]) == 0
+    mapping = out / "demo" / "mapping.md"
+    assert mapping.is_file(), "render skipped the task document"
+    text = mapping.read_text(encoding="utf-8")
+    assert "stmt:" in text and "ods.source" in text

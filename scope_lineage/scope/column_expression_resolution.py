@@ -16,17 +16,10 @@ from .scope_types import (
 # Leaf helpers come from `_shared`, never from the orchestrator: importing it back
 # formed a cycle that only worked because Python hands out a partially-initialised
 # module, making import order load-bearing (ARCH-001).
-from ._shared import (
-    _cached_pattern,
-    DIALECT,
-    PARSE_OPTS,
-    _generated_sources_from_refs,
-    _physical_source_fields_from_refs,
-    _qualified_field_refs,
-    _qualified_physical_field_sql,
-    _source_kind_for_resolution,
-    _unique_ordered,
-)
+from ._constants import DIALECT, PARSE_OPTS
+from .expression_refs import _cached_pattern, _qualified_field_refs
+from .sequences import _unique_ordered
+from .source_refs import _generated_sources_from_refs, _physical_source_fields_from_refs, _qualified_physical_field_sql, _source_kind_for_resolution
 
 
 def _expression_resolution_for_scope_column(scope_data: ScopeData, column: ScopeColumn) -> dict[str, object]:

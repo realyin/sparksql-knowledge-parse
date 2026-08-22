@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from sqlglot import exp
 
-from ._shared import DIALECT
+from ._constants import DIALECT
 
 QUOTED_REGEX_COLUMN_NAMES = "quotedregexcolumnnames"
 

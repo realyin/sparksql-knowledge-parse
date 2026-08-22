@@ -25,7 +25,12 @@ def _load_packaged_schema(name: str) -> dict:
 
 
 def validate_lineage_document(document: dict) -> dict:
-    """Validate an already-built Lineage document and return it unchanged."""
+    """Validate an already-built Lineage document and return it unchanged.
+
+    The "1.0" schema outlived the retired standalone v1 artifact on purpose: it is the
+    schema of the STATEMENT document, which is exactly what a task document embeds per
+    statement_lineage entry (and what the mapping renderer consumes per section).
+    """
     import jsonschema
 
     schema_name = {

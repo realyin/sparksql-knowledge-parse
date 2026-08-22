@@ -57,7 +57,7 @@ _MAX_ROUNDS = 12
 def _parses(sql: str) -> bool:
     try:
         sqlglot.parse(sql, dialect=DIALECT, error_level=sqlglot.ErrorLevel.RAISE)
-    except Exception:
+    except Exception:  # noqa: BLE001 - probe: any failure means 'does not parse'
         return False
     return True
 
@@ -97,7 +97,7 @@ def repair_keyword_identifiers(sql: str) -> tuple[str, tuple[str, ...]]:
             sqlglot.parse(current, dialect=DIALECT, error_level=sqlglot.ErrorLevel.RAISE)
         except ParseError as exc:
             errors = getattr(exc, "errors", None) or []
-        except Exception:
+        except Exception:  # noqa: BLE001 - non-ParseError means repair cannot proceed; return the original
             return sql, ()
         else:
             return current, tuple(quoted)

@@ -232,7 +232,7 @@ python -m pip install .
 ```
 
 The PyPI distribution and CLI are named `scope-lineage`; the Python import namespace is
-`scope_lineage`. The current `0.1.x` series is Alpha. See the
+`scope_lineage`. The current `0.2.x` series is Alpha. See the
 [Chinese installation and usage guide](docs/zh-CN/getting-started.md) for a self-contained tutorial.
 
 ## Quick start
@@ -273,23 +273,38 @@ explicitly accept invalid inputs or failed statements. See the complete syntheti
 [examples/README.zh-CN.md](examples/README.zh-CN.md) and the detailed
 [Core input formats](docs/zh-CN/input-formats.md).
 
-Opt into task-level contract 2.0 when statement order, DELETE/TRUNCATE/UPDATE, and row-membership
-lineage are required:
+Task-level contract 2.0 is the default: one ordered table-state artifact per task, covering
+statement order, DELETE/TRUNCATE/UPDATE, and row-membership lineage:
 
 ~~~bash
 scope-lineage parse \
   --task-file examples/tasks/customer/customer_profile_daily.json \
-  --contract-version 2.0 \
   --schema examples/metadata/schema_info.json \
   --schema-fallback examples/metadata/schema_info.csv \
   --quality-policy strict \
   --out /tmp/scope-lineage-v2
 ~~~
 
-Contract 1.0 remains the default. See [Task Lineage 2.0](docs/zh-CN/task-lineage-v2.md), and
-[which contract fits which scenario](docs/zh-CN/contract-selection.md) — field lineage and
-transformation-step analysis want the default 1.0; audits, incident forensics, and final table
-state want 2.0.
+See [Task Lineage 2.0](docs/zh-CN/task-lineage-v2.md). Field lineage and
+transformation-step analysis read the per-statement documents embedded in
+`statement_lineage`; audits, incident forensics, and final table state read the
+task-level facts.
+
+### Migrating from the removed contract 1.0
+
+The standalone contract-1.0 output mode (one artifact per projection write) has been
+removed. Migration is mostly re-pointing:
+
+- A task document's `statement_lineage` maps each `statement_id` to exactly the former
+  v1 statement document shape, in `statement_sequence` order — code that consumed a v1
+  `lineage.json` consumes one entry unchanged, and `lineage.schema.json` remains that
+  entry's schema (each entry is validated against it before writing).
+- Task-level answers live at the top level: `end_to_end_lineage` (final-state view),
+  `table_state_graph`, `final_table_states`, and `task_dependencies`.
+- `render` and `render_mapping_markdown` accept a task document (one mapping section per
+  statement) and still accept a single statement document.
+- The library writer is `write_task_lineage`; the statement converter `to_lineage_dict`
+  stays. `write_lineage` is gone.
 
 Render a human- and machine-readable field-mapping document (`mapping.md`) from artifacts
 that already exist:
@@ -417,16 +432,23 @@ Documentation:
 ## Python API
 
 ```python
-from scope_lineage import parse_scope_lineage, to_lineage_dict, write_lineage
+from scope_lineage import parse_task_lineage, to_lineage_dict, write_task_lineage
 
-result = parse_scope_lineage(
+task = parse_task_lineage(
     "INSERT INTO mart.user_ids SELECT id FROM ods.users",
     task_name="user_ids",
     schema={"ods.users": ["id"]},
 )
+write_task_lineage(task, "/tmp/scope-lineage/user_ids")
 
-document = to_lineage_dict(result)
-write_lineage(result, "/tmp/scope-lineage/user_ids")
+# per-statement documents (the shape each statement_lineage entry embeds):
+from scope_lineage import parse_scope_lineage
+
+statement = parse_scope_lineage(
+    "INSERT INTO mart.user_ids SELECT id FROM ods.users",
+    task_name="user_ids",
+)
+document = to_lineage_dict(statement)
 ```
 
 The supported public surface is declared by `scope_lineage.PUBLIC_CORE_API`. Consumers should use
@@ -434,7 +456,8 @@ that facade or the JSON contracts instead of importing internal modules.
 
 ## Contracts and limits
 
-Both output documents currently require `schema_version: "1.0"` and are validated before writing.
+The task documents carry `schema_version: "2.0"`; each `statement_lineage` entry keeps the
+statement-document shape (`schema_version: "1.0"`). Both are validated before writing.
 Within major version 1, consumers must tolerate additive optional fields. Removal, renaming, or a
 semantic change requires a new major contract version.
 

@@ -13,7 +13,7 @@ from sqlglot import exp
 from sqlglot.errors import SqlglotError
 
 from .scope_types import DiagnosticWarning, ScopeLineageResult
-from .sqlglot_config import suppress_invalid_json_path_warnings
+from ..sqlglot_config import suppress_invalid_json_path_warnings
 
 PARSE_OPTS = {"error_level": ErrorLevel.IGNORE}
 suppress_invalid_json_path_warnings()

@@ -1,6 +1,6 @@
 [project]
 name = "scope-lineage"
-version = "0.1.16"
+version = "0.2.0"
 description = "Spark/Hive SQL parsing foundation for AI-ready task knowledge bases"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -54,6 +54,11 @@ testpaths = ["tests"]
 target-version = "py39"
 
 [tool.ruff.lint]
-# Pyflakes only: F401 unused import, F811 redefinition, F821 undefined name,
-# F841 unused local. Add more codes deliberately, not by default.
-select = ["F"]
+# Pyflakes (F) as the safety net for mechanical refactor mistakes; BLE001 so every
+# blind `except Exception` must carry a noqa naming its reason; C901 at a threshold
+# calibrated to the four legacy hotspots (each carries a dated exemption) so new
+# complexity goes red while the stock is paid down. Add more codes deliberately.
+select = ["F", "BLE", "C901"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 24

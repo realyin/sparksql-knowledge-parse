@@ -16,7 +16,7 @@ from .schema_metadata import (
     check_metadata_file,
     normalize_table_name,
 )
-from ..scope.sqlglot_config import suppress_invalid_json_path_warnings
+from ..sqlglot_config import suppress_invalid_json_path_warnings
 
 
 suppress_invalid_json_path_warnings()
@@ -542,7 +542,7 @@ def _facts_from_ddl(
             dialect="spark",
             error_level=ErrorLevel.RAISE,
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - a bad DDL is data, not a crash; recorded as ddl_parse_failed with the type
         issues.append(f"ddl_parse_failed:{type(exc).__name__}")
         return "", [], []
     if not isinstance(tree, exp.Create) or not isinstance(tree.this, exp.Schema):

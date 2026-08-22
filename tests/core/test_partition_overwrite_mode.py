@@ -358,18 +358,19 @@ def test_a_valued_spec_ignores_the_declaration():
     assert "partition_overwrite_mode_declared" not in effects[0]
 
 
-def test_the_cli_rejects_the_flag_under_contract_1_0(tmp_path, capsys):
-    """Contract 1.0 models no overwrite effect, so the value would be silently inert."""
+def test_requesting_the_removed_contract_1_0_fails_loudly(tmp_path, capsys):
+    """The flag outlives the removed contract by one release so a 1.0 request gets a
+    clear choices error instead of an unknown-argument error."""
     import pytest
 
     from scope_lineage.cli import main
 
     sql = tmp_path / "t.sql"
-    sql.write_text("INSERT OVERWRITE TABLE mart.t PARTITION(dt) SELECT 1, 2, 3")
+    sql.write_text("INSERT INTO mart.t SELECT 1")
     with pytest.raises(SystemExit):
-        main(["parse", "--sql-file", str(sql), "--out", str(tmp_path / "o"),
-              "--partition-overwrite-mode", "dynamic"])
-    assert "requires --contract-version 2.0" in capsys.readouterr().err
+        main(["parse", "--contract-version", "1.0", "--sql-file", str(sql),
+              "--out", str(tmp_path / "o")])
+    assert "invalid choice: '1.0'" in capsys.readouterr().err
 
 
 def test_the_cli_rejects_an_unusable_value_once(tmp_path, capsys):
