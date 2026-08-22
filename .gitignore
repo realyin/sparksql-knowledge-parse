@@ -11,7 +11,9 @@ dist/
 *.env
 credentials*
 
-# Local AI assistant configuration
+# Local AI assistant configuration. CLAUDE.md is local-only BY DESIGN: it may carry
+# private corpus paths and numbers that must never reach a published surface (see the
+# same-named rule inside it). Public engineering rules belong in CONTRIBUTING.md.
 CLAUDE.md
 .claude/
 .codex/
