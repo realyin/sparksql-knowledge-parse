@@ -1,6 +1,10 @@
 # Changelog
 
 ## Unreleased
+- **Breaking**: removed four facade exports with no remaining consumer
+  (`build_end_to_end_lineage`, `build_scope_profile`, `materialize_schema`,
+  `table_details_for_table`) after the downstream consumer's retirement was confirmed.
+  Their implementations stay internal to the packages that own them.
 - **Breaking**: `--contract-version` now defaults to `2.0`. Contract 1.0 (one artifact per
   projection write) still works when requested explicitly, prints a deprecation notice, and
   is scheduled for removal one minor release later; the library writer `write_lineage`
