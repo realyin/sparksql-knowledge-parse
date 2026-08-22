@@ -37,7 +37,7 @@ from .metadata.target_table_metadata import (
     load_target_table_metadata,
     lookup_target_table_metadata,
 )
-from .scope._shared import extract_qualified_field_refs
+from .scope.expression_refs import extract_qualified_field_refs
 from .scope.end_to_end import build_end_to_end_lineage
 from .scope.parser import resolve_display_expression
 from .scope.scope_builder import (
