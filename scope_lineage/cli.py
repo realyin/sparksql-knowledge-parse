@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 import sys
+import traceback
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -367,9 +368,11 @@ def _parse_inputs(args: argparse.Namespace) -> int:
                     binding_fallback_count += 1
                 if result.syntax_status == "recovered":
                     recovered_syntax_count += 1
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - batch boundary: one bad input must not kill the run; type+traceback go to stderr
             input_failed_count += 1
             print(f"  FAILED {source_path}: {type(exc).__name__}: {exc}", file=sys.stderr)
+            # The traceback is what separates a Core bug from a bad input file.
+            print(traceback.format_exc().rstrip(), file=sys.stderr)
 
     print(
         f"Parsed {result_count} statement(s) from {len(source_paths)} input(s) "
@@ -471,12 +474,14 @@ def _parse_task_inputs_v2(
                 for lineage in result.statement_lineage.values()
             )
             recovered_syntax_count += result.syntax_status == "recovered"
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - batch boundary: one bad input must not kill the run; type+traceback go to stderr
             input_failed_count += 1
             print(
                 f"  FAILED {source_path}: {type(exc).__name__}: {exc}",
                 file=sys.stderr,
             )
+            # The traceback is what separates a Core bug from a bad input file.
+            print(traceback.format_exc().rstrip(), file=sys.stderr)
 
     print(
         f"Parsed {statement_count} statement(s) from {len(source_paths)} input(s) "

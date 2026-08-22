@@ -199,7 +199,7 @@ def _parse_window_expression(expression: str) -> exp.Window | None:
         return None
     try:
         parsed = sqlglot.parse_one(expression, dialect=DIALECT, **PARSE_OPTS)
-    except Exception:
+    except Exception:  # noqa: BLE001 - best-effort re-parse of a fragment; None means no window facts
         return None
     if isinstance(parsed, exp.Window):
         return parsed
@@ -669,7 +669,7 @@ def _subquery_predicate_dependencies(
             continue
         try:
             subquery_sql = sub_scope.expression.sql(dialect=DIALECT)
-        except Exception:
+        except Exception:  # noqa: BLE001 - rendering a subquery is best-effort evidence, not a required step
             subquery_sql = ""
         if subquery_sql and subquery_sql not in predicate_sql:
             continue

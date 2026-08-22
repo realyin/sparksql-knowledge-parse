@@ -235,7 +235,7 @@ def _aggregate_struct_member_expression(
             dialect=DIALECT,
             error_level=ErrorLevel.RAISE,
         )
-    except Exception:
+    except Exception:  # noqa: BLE001 - an unparseable rendering is itself the answer: no expansion
         return None
     while isinstance(parsed, exp.Paren):
         parsed = parsed.this
@@ -260,7 +260,7 @@ def _aggregate_struct_member_expression(
             dialect=DIALECT,
             error_level=ErrorLevel.RAISE,
         )
-    except Exception:
+    except Exception:  # noqa: BLE001 - an unparseable rendering is itself the answer: no expansion
         return None
     return rendered
 

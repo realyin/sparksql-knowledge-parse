@@ -99,7 +99,7 @@ def _qualified_field_ref_keys_from_ast(
         return set()
     try:
         parsed = sqlglot.parse_one(expression_sql, dialect=DIALECT, **PARSE_OPTS)
-    except Exception:
+    except Exception:  # noqa: BLE001 - AST confirmation is best-effort; None falls back to the text scan
         return None
     refs: set[tuple[str, str]] = set()
     for column in parsed.find_all(exp.Column):

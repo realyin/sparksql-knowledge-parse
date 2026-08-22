@@ -23,7 +23,7 @@ from .source_refs import _dedupe_generated_source_dicts, _generated_sources_from
 from .expansion_budget import ExpansionBudget
 
 
-def _propagate_passthrough_expression_resolution(result: ScopeLineageResult) -> None:
+def _propagate_passthrough_expression_resolution(result: ScopeLineageResult) -> None:  # noqa: C901 - legacy exemption (WI-11): complexity 33, the pipeline convergence pass
     output_lookup = {(scope_id, output.name): output for (scope_id, scope_data) in result.scopes.items() for output in scope_data.outputs}
     changed = True
     while changed:

@@ -250,7 +250,7 @@ def _task_dependencies_to_dict(task_dependencies: dict | None) -> dict:
     }
 
 
-def _scope_data_to_dict(sd: ScopeData) -> dict:
+def _scope_data_to_dict(sd: ScopeData) -> dict:  # noqa: C901 - legacy exemption (WI-11): shrink when next touched
     d: dict[str, Any] = {"kind": sd.kind}
     if sd.role is not None:
         d["role"] = sd.role

@@ -233,7 +233,7 @@ def _populate_scope_sql(scope_data: ScopeData, sg_scope: Scope) -> None:
     try:
         scope_data.raw_sql = sg_scope.expression.sql(dialect=DIALECT)
         scope_data.raw_sql_available = bool(scope_data.raw_sql)
-    except Exception:
+    except Exception:  # noqa: BLE001 - raw_sql is evidence, not structure; absence is recorded as raw_sql_available=False
         scope_data.raw_sql = None
         scope_data.raw_sql_available = False
 
@@ -1728,7 +1728,7 @@ def _expand_reintroduced_refs(
     return True
 
 
-def _resolve_internal_scope_expression_resolution(result: ScopeLineageResult) -> None:
+def _resolve_internal_scope_expression_resolution(result: ScopeLineageResult) -> None:  # noqa: C901 - legacy exemption (WI-11): shrink when next touched
     output_lookup = {
         (scope_id, output.name): output
         for scope_id, scope_data in result.scopes.items()

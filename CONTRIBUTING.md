@@ -27,6 +27,16 @@ done
 pip install -q -c constraints-dev.txt sqlglot   # restore the dev pin afterwards
 ```
 
+Seven functions are 150 lines or longer (`parse_task_lineage`,
+`_resolve_internal_scope_expression_resolution`, `_apply_projection_write`,
+`_build_result_from_scope`, `cli.main`, `_resolve_merge_columns`, `_expand_star_into_columns`).
+When a change touches one of them, extract the segment you modified into a named private
+function as part of the same change -- they shrink opportunistically, never grow. Ruff's
+`C901` (threshold 24) keeps new complexity out; the four legacy exemptions are marked
+`noqa: C901 - legacy exemption (WI-11)` and each removal is welcome. Every blind
+`except Exception` must carry a `noqa: BLE001 - <reason>` naming why the boundary is
+allowed to be blind.
+
 Keep Core domain-neutral. Warehouse layer names, business-domain rules, report builders, and
 modeling recommendations belong in downstream projects rather than this package.
 

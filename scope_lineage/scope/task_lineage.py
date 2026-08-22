@@ -368,7 +368,7 @@ def parse_task_lineage(
                         f"{statement['stmt_kind']} is not modeled by task lineage"
                     ),
                 })
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - statement boundary: recorded as model_status=failed + LINEAGE_ERROR, script continues
             parse_failed = True
             statement["model_status"] = "failed"
             warnings.append({

@@ -321,7 +321,7 @@ def _syntax_status(sql: str) -> tuple[str, list[dict]]:
         return "recovered", _ordered_syntax_errors([
             {key: item[key] for key in _SYNTAX_ERROR_KEYS if key in item} for item in raw
         ])
-    except Exception as exc:  # tokenizer-level failures raise their own types
+    except Exception as exc:  # noqa: BLE001 - tokenizer-level failures raise their own types; all become parse_status=failed
         return "recovered", [{"description": f"{type(exc).__name__}: {exc}"}]
     return "strict_ok", []
 
@@ -464,7 +464,7 @@ def parse_all_scope_lineage(
                             regex_columns_enabled=enabled,
                         )
                     )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - statement boundary: the failure becomes a failed result with LINEAGE_ERROR, batch continues
             stmt_kind = _stmt_kind_for_tree(tree)
             target_table = _target_table_name_for_error_result(tree)
             result = ScopeLineageResult(
@@ -725,7 +725,7 @@ def _qualify_ast(ast: exp.Expression) -> tuple[exp.Expression, bool]:
             infer_schema=True,
             expand_stars=False,
         ), True
-    except Exception:
+    except Exception:  # noqa: BLE001 - qualify is an enhancement; the unqualified AST is a valid answer
         return ast, False
 
 
@@ -1073,7 +1073,7 @@ def _drop_dangling_column_refs(result: ScopeLineageResult) -> None:
                     source.scope = "UNKNOWN"
 
 
-def _build_result_from_scope(
+def _build_result_from_scope(  # noqa: C901 - legacy exemption (WI-11): shrink when next touched
     qualified_expr, result: ScopeLineageResult, target_table: str,
     schema: dict | None = None,
     regex_columns_enabled: bool = True,
