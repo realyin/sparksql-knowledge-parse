@@ -68,8 +68,12 @@ def test_cli_counts_unsupported_mutation_once_per_task_and_balanced_rejects_it(
     sql_path = tmp_path / "mixed.sql"
     _mixed_script(sql_path)
 
+    # Pinned to 1.0: the per-statement quality gate is v1 policy machinery; the task
+    # contract models these mutations as table state instead of counting them.
     assert main([
         "parse",
+        "--contract-version",
+        "1.0",
         "--sql-file",
         str(sql_path),
         "--out",
@@ -79,6 +83,8 @@ def test_cli_counts_unsupported_mutation_once_per_task_and_balanced_rejects_it(
 
     assert main([
         "parse",
+        "--contract-version",
+        "1.0",
         "--sql-file",
         str(sql_path),
         "--quality-policy",
@@ -98,6 +104,8 @@ def test_explicit_unsupported_mutation_gate_does_not_require_balanced_policy(
 
     assert main([
         "parse",
+        "--contract-version",
+        "1.0",
         "--sql-file",
         str(sql_path),
         "--fail-on-unsupported-mutation",

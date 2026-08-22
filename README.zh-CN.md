@@ -282,13 +282,12 @@ scope-lineage parse \
 目录会递归发现 `*.json`。嵌套目录结构会保留到输出目录中；一个任务包含多条支持的写表语句时，
 每条语句分别生成产物。只有调用方明确接受失败输入或失败语句时，才使用 `--allow-partial`。
 
-需要保留整个任务的语句顺序，并建模 DELETE、TRUNCATE、UPDATE、字段值与行集合影响时，使用
-任务级 2.0 契约：
+任务级 2.0 契约现在是默认值：每个任务一份有序的表状态产物，保留语句顺序，并建模
+DELETE、TRUNCATE、UPDATE、字段值与行集合影响：
 
 ~~~bash
 scope-lineage parse \
   --task-file examples/tasks/customer/customer_profile_daily.json \
-  --contract-version 2.0 \
   --schema examples/metadata/schema_info.json \
   --schema-fallback examples/metadata/schema_info.csv \
   --quality-policy strict \
@@ -296,6 +295,20 @@ scope-lineage parse \
 ~~~
 
 详见 [Task Lineage 2.0](docs/zh-CN/task-lineage-v2.md)。
+
+### 从 1.0 迁移到任务契约
+
+契约 1.0（每条投影写一份产物，`--contract-version 1.0`）已弃用，计划在 0.2.0 之后的
+一个 minor 版本移除。迁移主要是"重新指向"：
+
+- v2 文档的 `statement_lineage` 以 `statement_id` 为键，每个条目就是完整的 v1 语句文档
+  形状，顺序由 `statement_sequence` 给出——原来消费 v1 `lineage.json` 的代码可以原样消费
+  单个条目。
+- 任务级问题上移一层：`end_to_end_lineage`（最终态视图）、`table_state_graph`、
+  `final_table_states`、`task_dependencies` 是 v1 没有的顶层事实。
+- `render` 与 `render_mapping_markdown` 两种形状都接受；任务文档按语句逐节渲染。
+- 库函数 `write_lineage`（v1 产物写入器）会发出 `DeprecationWarning`，由
+  `write_task_lineage` 取代；语句转换器 `to_lineage_dict` 保留不弃用。
 
 对已生成的产物再渲染一份人和机器都可读的字段映射文档 `mapping.md`：
 

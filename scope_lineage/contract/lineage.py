@@ -132,6 +132,17 @@ def write_lineage(
     compact: bool = False,
 ) -> Path:
     """Validate and write only lineage.json plus diagnostics.json."""
+    import warnings as _warnings
+
+    # Deprecation applies to the standalone v1 ARTIFACT, not to the statement->dict
+    # converter: the v2 task document builds its statement_lineage entries through
+    # to_lineage_dict, which therefore stays undeprecated.
+    _warnings.warn(
+        "write_lineage emits the deprecated contract-1.0 artifact, scheduled for "
+        "removal; write_task_lineage (contract 2.0) replaces it",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 

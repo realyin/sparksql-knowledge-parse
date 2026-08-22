@@ -1,10 +1,29 @@
 # Changelog
 
 ## Unreleased
+- **Breaking**: `--contract-version` now defaults to `2.0`. Contract 1.0 (one artifact per
+  projection write) still works when requested explicitly, prints a deprecation notice, and
+  is scheduled for removal one minor release later; the library writer `write_lineage`
+  emits a `DeprecationWarning`. The statement converter `to_lineage_dict` is NOT
+  deprecated -- the task contract builds its `statement_lineage` entries through it.
+- `render` / `render_mapping_markdown` accept contract-2.0 task documents and render one
+  mapping section per statement, in `statement_sequence` order. Unknown schema versions
+  are still rejected.
 - **Breaking**: removed the v1-era result types `Column`, `ColumnRef`, `JoinKey`,
   `LineageResult`, and `Unresolved` from the public API. Nothing inside the package, the test
   suite, or the approved consumer surface referenced them; they predate `ScopeLineageResult`
   and had no producer. Consumers of the current parser entry points are unaffected.
+- Fixed the internal-resolution pass rewriting settled outputs: a completed expansion
+  (resolved, physical fields present) is no longer mistaken for a damaged one, so the
+  fine-grained `scope_output_trace` provenance chain can never be collapsed by an extra
+  resolution round. Golden artifacts are byte-identical.
+- Internal restructuring, no artifact changes: the `_shared.py` grab-bag split into ten
+  themed modules; the fact pipeline expressed as four named phases with convergence loops
+  and a wiring guard test; a package dependency-direction architecture test now runs in CI;
+  the `expression_resolution` payload is typed (`fact_protocols.py`) with a non-blocking
+  pyright job. Deep imports of `scope_lineage.scope._shared`, `scope.types`, or
+  `scope.sqlglot_config` (now `scope_lineage.sqlglot_config`) no longer resolve -- the
+  supported surface remains the package facade.
 
 ## 0.1.16
 - MERGE assignment values now resolve in the scope their WHEN branch can actually see. Spark

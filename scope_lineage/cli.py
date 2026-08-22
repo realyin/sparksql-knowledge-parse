@@ -86,10 +86,11 @@ def main(argv: list[str] | None = None) -> int:
     parse_cmd.add_argument(
         "--contract-version",
         choices=("1.0", "2.0"),
-        default="1.0",
+        default="2.0",
         help=(
-            "Output contract: 1.0 keeps one artifact per projection write; "
-            "2.0 emits one task-level ordered table-state artifact"
+            "Output contract: 2.0 (default) emits one task-level ordered table-state "
+            "artifact; 1.0, one artifact per projection write, is deprecated and "
+            "scheduled for removal"
         ),
     )
     parse_cmd.add_argument(
@@ -306,6 +307,12 @@ def _parse_inputs(args: argparse.Namespace) -> int:
     )
     out_root = Path(args.out)
     source_paths, input_root = _source_paths(args)
+    if args.contract_version == "1.0":
+        print(
+            "warning: contract version 1.0 is deprecated and scheduled for removal; "
+            "switch to 2.0 (the default) -- see README \u00a7 Migrating to the task contract",
+            file=sys.stderr,
+        )
     if args.contract_version == "2.0":
         return _parse_task_inputs_v2(
             args,

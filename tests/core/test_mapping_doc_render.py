@@ -92,11 +92,36 @@ def _front_matter(rendered: str) -> dict:
 # ---------------------------------------------------------------- entry contract
 
 
-def test_rejects_non_v1_documents() -> None:
+def test_rejects_unknown_schema_versions() -> None:
     document = _document("INSERT INTO mart.t SELECT id FROM ods.users")
-    document["schema_version"] = "2.0"
-    with pytest.raises(ValueError, match="2.0"):
+    document["schema_version"] = "3.0"
+    with pytest.raises(ValueError, match="3.0"):
         render_mapping_markdown(document)
+
+
+def test_renders_a_v2_task_document_one_section_per_statement() -> None:
+    import json
+    from pathlib import Path
+
+    task_doc = json.loads(
+        (
+            Path(__file__).parent
+            / "fixtures"
+            / "task_lineage_contract"
+            / "merge_cte_source"
+            / "lineage.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert task_doc["schema_version"] == "2.0"
+
+    rendered = render_mapping_markdown(task_doc)
+
+    for statement in task_doc["statement_sequence"]:
+        statement_id = statement["statement_id"]
+        assert statement_id in rendered, f"statement {statement_id} missing from render"
+        entry = task_doc["statement_lineage"][statement_id]
+        # Each statement section is the v1 render of its entry.
+        assert render_mapping_markdown(entry) in rendered
 
 
 def test_renders_twice_byte_identical() -> None:

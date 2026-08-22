@@ -273,20 +273,35 @@ explicitly accept invalid inputs or failed statements. See the complete syntheti
 [examples/README.zh-CN.md](examples/README.zh-CN.md) and the detailed
 [Core input formats](docs/zh-CN/input-formats.md).
 
-Opt into task-level contract 2.0 when statement order, DELETE/TRUNCATE/UPDATE, and row-membership
-lineage are required:
+Task-level contract 2.0 is the default: one ordered table-state artifact per task, covering
+statement order, DELETE/TRUNCATE/UPDATE, and row-membership lineage:
 
 ~~~bash
 scope-lineage parse \
   --task-file examples/tasks/customer/customer_profile_daily.json \
-  --contract-version 2.0 \
   --schema examples/metadata/schema_info.json \
   --schema-fallback examples/metadata/schema_info.csv \
   --quality-policy strict \
   --out /tmp/scope-lineage-v2
 ~~~
 
-Contract 1.0 remains the default. See [Task Lineage 2.0](docs/zh-CN/task-lineage-v2.md).
+See [Task Lineage 2.0](docs/zh-CN/task-lineage-v2.md).
+
+### Migrating to the task contract
+
+Contract 1.0 (one artifact per projection write, `--contract-version 1.0`) is deprecated and
+scheduled for removal one minor release after 0.2.0. Migration is mostly re-pointing:
+
+- A v2 document's `statement_lineage` maps each `statement_id` to exactly the v1 statement
+  document shape, in `statement_sequence` order — code that consumed a v1 `lineage.json`
+  consumes one entry unchanged.
+- Task-level answers move up a level: `end_to_end_lineage` (final-state view),
+  `table_state_graph`, `final_table_states`, and `task_dependencies` are new top-level
+  facts v1 never had.
+- `render` and `render_mapping_markdown` accept both shapes; a task document renders one
+  mapping section per statement.
+- The library writer `write_lineage` (v1 artifact) emits a `DeprecationWarning`;
+  `write_task_lineage` replaces it. The statement converter `to_lineage_dict` stays.
 
 Render a human- and machine-readable field-mapping document (`mapping.md`) from artifacts
 that already exist:

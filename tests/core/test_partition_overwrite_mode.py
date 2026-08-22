@@ -367,7 +367,8 @@ def test_the_cli_rejects_the_flag_under_contract_1_0(tmp_path, capsys):
     sql = tmp_path / "t.sql"
     sql.write_text("INSERT OVERWRITE TABLE mart.t PARTITION(dt) SELECT 1, 2, 3")
     with pytest.raises(SystemExit):
-        main(["parse", "--sql-file", str(sql), "--out", str(tmp_path / "o"),
+        main(["parse", "--contract-version", "1.0", "--sql-file", str(sql),
+              "--out", str(tmp_path / "o"),
               "--partition-overwrite-mode", "dynamic"])
     assert "requires --contract-version 2.0" in capsys.readouterr().err
 

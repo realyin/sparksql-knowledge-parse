@@ -46,6 +46,11 @@ scope_lineage = ["schemas/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+filterwarnings = [
+    # The v1 writer's own deprecation: baseline and pinned-1.0 tests exercise it on
+    # purpose through the removal window; drop this filter together with the writer.
+    "ignore:write_lineage emits the deprecated contract-1.0 artifact:DeprecationWarning",
+]
 
 [tool.ruff]
 # Lint safety net for the ongoing core-module refactor. Intentionally narrow:

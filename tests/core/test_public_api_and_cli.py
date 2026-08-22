@@ -50,7 +50,7 @@ def test_core_cli_writes_only_lineage_and_diagnostics(tmp_path) -> None:
         "lineage.json",
         "diagnostics.json",
     }
-    assert json.loads((task_dir / "lineage.json").read_text())["schema_version"] == "1.0"
+    assert json.loads((task_dir / "lineage.json").read_text())["schema_version"] == "2.0"
 
 
 def test_core_cli_accepts_exported_task_json_and_keeps_dependencies(tmp_path) -> None:
@@ -162,8 +162,12 @@ def test_core_cli_preserves_catalog_by_default_and_strips_configured_prefix(
     )
 
     default_output = tmp_path / "default"
+    # Pinned to 1.0 (deprecation-window coverage): the assertions read the v1
+    # statement-document shape; catalog handling itself is contract-independent.
     assert main([
         "parse",
+        "--contract-version",
+        "1.0",
         "--sql-file",
         str(sql_path),
         "--out",
@@ -177,6 +181,8 @@ def test_core_cli_preserves_catalog_by_default_and_strips_configured_prefix(
     configured_output = tmp_path / "configured"
     assert main([
         "parse",
+        "--contract-version",
+        "1.0",
         "--sql-file",
         str(sql_path),
         "--catalog-prefixes",
@@ -207,6 +213,8 @@ def test_core_cli_catalog_prefixes_override_environment(tmp_path, monkeypatch) -
 
     assert main([
         "parse",
+        "--contract-version",
+        "1.0",
         "--sql-file",
         str(sql_path),
         "--catalog-prefixes",
@@ -226,8 +234,12 @@ def test_documented_example_corpus_is_executable(tmp_path) -> None:
     project_root = Path(__file__).resolve().parents[2]
     output = tmp_path / "output"
 
+    # Pinned to 1.0 (deprecation-window coverage): the corpus assertions document the
+    # v1 statement artifacts; the task contract's corpus lives in the golden fixtures.
     assert main([
         "parse",
+        "--contract-version",
+        "1.0",
         "--input-dir",
         str(project_root / "examples" / "tasks"),
         "--schema",
@@ -415,6 +427,8 @@ def test_select_star_example_expands_and_uses_target_binding(tmp_path) -> None:
 
     assert main([
         "parse",
+        "--contract-version",
+        "1.0",
         "--sql-file",
         str(project_root / "examples" / "sql" / "select_star_with_schema.sql"),
         "--schema",
