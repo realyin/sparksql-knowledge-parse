@@ -62,7 +62,7 @@ from .scope.scope_types import (
     ScopeOutputField,
     SourceRef,
 )
-from .scope.sqlglot_config import suppress_invalid_json_path_warnings
+from .sqlglot_config import suppress_invalid_json_path_warnings
 from .scope.task_lineage import TaskLineageResult, parse_task_lineage
 from .contract.fold import fold_session_scoped
 from .render.mapping_markdown import render_mapping_markdown, render_warnings_markdown

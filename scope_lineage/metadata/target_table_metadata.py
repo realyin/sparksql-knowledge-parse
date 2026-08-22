@@ -16,7 +16,7 @@ from .schema_metadata import (
     check_metadata_file,
     normalize_table_name,
 )
-from ..scope.sqlglot_config import suppress_invalid_json_path_warnings
+from ..sqlglot_config import suppress_invalid_json_path_warnings
 
 
 suppress_invalid_json_path_warnings()

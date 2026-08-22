@@ -26,7 +26,7 @@ from .parser import (
     _qualified_table,
     _unwrap_target,
 )
-from ..metadata.related_metadata import build_related_metadata
+from .related_metadata import build_related_metadata
 from ..metadata.schema_metadata import SchemaMap, normalize_schema_map
 from ..metadata.target_table_metadata import lookup_target_table_metadata
 from .scope_types import (
@@ -39,7 +39,7 @@ from .scope_resolver import resolve_all
 from .select_scope import _star_modifiers
 from .scope_warnings import detect_warnings
 from .scope_role_inferrer import infer_roles
-from .sqlglot_config import suppress_invalid_json_path_warnings
+from ..sqlglot_config import suppress_invalid_json_path_warnings
 from ._shared import DIALECT, PARSE_OPTS, render_sql_or_none, _ORIGINALLY_UNQUALIFIED_META, _SCOPE_ID_ATTR, _inside_nested_subquery, _find_alias_in_parent, _unique_ordered
 # Re-exported only for the private integration repository, whose tests reach these through
 # this module instead of through ._shared. Nothing in this module uses them.
