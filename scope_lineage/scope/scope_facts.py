@@ -2419,7 +2419,18 @@ def _should_rebuild_internal_expansion_from_expression(
         _qualified_ref_present(expanded_expression, qualifier, field)
         for qualifier, field in internal_refs
     )
-    return has_unexpanded_alias_reason or lost_original_internal_refs
+    # Absent internal refs are ambiguous: expansion may have mangled the text, or it may
+    # have FINISHED -- replaced every internal ref with its physical fields. Rebuilding in
+    # the second case is what made this pass non-idempotent: it clobbered source_scope_id
+    # and the refined resolution, and the provenance trace built later collapsed to one
+    # coarse record (WI-09 root cause; the idempotence test and the WI-08 sentinel both
+    # stand on this line). A completed expansion is recognizable and exempt.
+    expansion_completed = (
+        str(current_resolution.get("status") or "") == "resolved"
+        and bool(current_resolution.get("physical_source_fields"))
+        and not has_unexpanded_alias_reason
+    )
+    return has_unexpanded_alias_reason or (lost_original_internal_refs and not expansion_completed)
 
 
 def _qualified_ref_present(expression: str, qualifier: str, field: str) -> bool:
