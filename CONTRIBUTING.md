@@ -16,6 +16,18 @@ python -m pytest tests/core/test_lineage_contract_baseline.py -q
 git diff --check                       # whitespace/conflict check after edits
 ```
 
+A change that claims to be behavior-neutral (refactors above all) must prove it against
+more than the 12 golden fixtures -- they once missed three real output changes that a
+corpus-wide comparison caught. Run the differential harness against the branch point:
+
+```bash
+python tests/architecture/differential_compare.py main
+```
+
+It runs both code versions over every example task, example SQL, and golden case
+(currently 21 inputs, ~257k leaf key/value pairs) and reports each difference with its
+exact JSON path; exit 0 means byte-identical documents.
+
 Before landing any change that re-records a golden baseline, rebase on the latest `main` and
 run the suite once per CI compat-matrix sqlglot version -- a baseline recorded against one
 version can silently disagree with the others:
