@@ -103,7 +103,7 @@ def _qualified_field_ref_keys_from_ast(
         return None
     refs: set[tuple[str, str]] = set()
     for column in parsed.find_all(exp.Column):
-        if _column_is_inside_nested_query(parsed, column):
+        if _inside_nested_subquery(parsed, column):
             continue
         parts = [str(part.name or "") for part in column.parts if getattr(part, "name", None)]
         if len(parts) >= 3 and parts[0] and parts[1] and parts[0] not in lambda_qualifiers:
@@ -115,7 +115,13 @@ def _qualified_field_ref_keys_from_ast(
         refs.add((qualifier, field))
     return refs
 
-def _column_is_inside_nested_query(root: exp.Expression, column: exp.Column) -> bool:
+def _inside_nested_subquery(root: exp.Expression, column: exp.Column) -> bool:
+    """Return True when ``column`` sits inside a nested SELECT or subquery of ``root``.
+
+    Deliberately distinct from _shared._inside_nested_set_op: AST-level ref extraction
+    must treat an exp.Subquery wrapper as a boundary (its columns belong to the inner
+    query), while set-op branches are not its concern -- see WI-03 for the pairing.
+    """
     parent = column.parent
     while parent is not None and parent is not root:
         if isinstance(parent, (exp.Select, exp.Subquery)):

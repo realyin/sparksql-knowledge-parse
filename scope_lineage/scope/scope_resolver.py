@@ -26,7 +26,7 @@ from .scope_types import (
     ScopeLineageResult,
     DiagnosticWarning,
 )
-from ._shared import DIALECT, _KNOWN_UDAFS, _SCOPE_ID_ATTR, _classify_extended, _constant_sources, _contains_runtime_function, _inside_nested_query, _selected_sources, _source_free_leaf_sources, _source_item_from_ast_node, _source_ref_for_source, _source_scope_id, _system_sources, _unique_ordered__resolver as _unique_ordered  # noqa: F401  (shared helpers; re-exported)
+from ._shared import DIALECT, _KNOWN_UDAFS, _SCOPE_ID_ATTR, _classify_extended, _constant_sources, _contains_runtime_function, _inside_nested_set_op, _selected_sources, _source_free_leaf_sources, _source_item_from_ast_node, _source_ref_for_source, _source_scope_id, _system_sources  # noqa: F401  (shared helpers; re-exported)
 from .column_ref_resolver import _ambiguous_ref, _materialized_star_column_state, _resolve_column_refs_in_expr  # noqa: F401
 from ._shared import (  # noqa: F401
     _REGEX_COLUMN_METACHARACTERS,
@@ -1342,7 +1342,7 @@ def _resolve_merge_value_sources(
     # against MERGE USING. Match the query to its SQLGlot scope by AST identity and
     # reference the one value that the scalar scope exposes.
     for subquery in value_expr.find_all(exp.Subquery):
-        if subquery is not value_expr and _inside_nested_query(subquery, value_expr):
+        if subquery is not value_expr and _inside_nested_set_op(value_expr, subquery):
             continue
         query = subquery.unnest()
         scalar_scope = next(
@@ -1356,7 +1356,7 @@ def _resolve_merge_value_sources(
 
     using_scope_id = getattr(using_scope, _SCOPE_ID_ATTR, None)
     for col_ref in value_expr.find_all(exp.Column):
-        if _inside_nested_query(col_ref, value_expr):
+        if _inside_nested_set_op(value_expr, col_ref):
             continue
         col_table = col_ref.table
         col_name = col_ref.name

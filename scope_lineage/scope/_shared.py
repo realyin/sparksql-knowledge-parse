@@ -69,7 +69,7 @@ def _source_ref_binding_key(ref: SourceRef) -> tuple[str, str, str, str, str]:
 
 from .expression_refs import (  # noqa: F401 -- transitional re-export until WI-06 repoints importers
     _cached_pattern,
-    _column_is_inside_nested_query,
+    _inside_nested_subquery,
     _lambda_qualifiers,
     _qualified_field_refs,
     _qualified_pair_is_catalog_function_prefix,
@@ -1154,9 +1154,17 @@ _KNOWN_SCALAR_FUNCTIONS = {
 }
 
 def _unique_ordered(values: list[str]) -> list[str]:
+    """Order-preserving dedupe that drops falsy entries.
+
+    The single implementation (WI-03): the former `_unique_ordered__resolver`, which kept
+    empty strings, differed only at call sites whose inputs are provably non-empty
+    (or-fallback scope ids and qualified table names), so its behavior was unreachable.
+    """
+    seen: set[str] = set()
     result: list[str] = []
     for value in values:
-        if value and value not in result:
+        if value and value not in seen:
+            seen.add(value)
             result.append(value)
     return result
 
@@ -1285,12 +1293,18 @@ def render_sql_or_none(tree: exp.Expression) -> str | None:
         return None
 
 
-def _inside_nested_query(col_ref: exp.Column, root_expr: exp.Expression) -> bool:
-    """Return True when a column belongs to a nested query inside root_expr."""
-    if col_ref is root_expr:
+def _inside_nested_set_op(root: exp.Expression, node: exp.Expression) -> bool:
+    """Return True when ``node`` sits inside a nested SELECT or set-op branch of ``root``.
+
+    Deliberately distinct from expression_refs._inside_nested_subquery: this one treats a
+    UNION between node and root as nesting (resolvers must not attribute a set-op branch's
+    columns to the outer expression) but does NOT stop at a bare exp.Subquery wrapper, and
+    it accepts any node -- the resolvers also probe subquery nodes, not just columns.
+    """
+    if node is root:
         return False
-    parent = col_ref.parent
-    while parent is not None and parent is not root_expr:
+    parent = node.parent
+    while parent is not None and parent is not root:
         if isinstance(parent, (exp.Select, exp.Union)):
             return True
         parent = parent.parent
@@ -1355,16 +1369,6 @@ def _source_scope_id(alias: str, source: Scope, result: ScopeLineageResult) -> s
         if candidate in result.scopes:
             return candidate
     return upstream_id
-
-def _unique_ordered__resolver(values: list[str]) -> list[str]:
-    seen: set[str] = set()
-    unique: list[str] = []
-    for value in values:
-        if value in seen:
-            continue
-        seen.add(value)
-        unique.append(value)
-    return unique
 
 def _classify_extended(node: exp.Expression) -> str:
     """Classify expression type. Extends parser._classify with UNION and EXPAND_ALL."""

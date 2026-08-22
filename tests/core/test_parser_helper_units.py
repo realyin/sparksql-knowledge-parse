@@ -94,3 +94,41 @@ def test_star_inside_a_union_branch_still_counts_as_a_star():
         "SELECT id FROM ods.a UNION ALL SELECT id FROM ods.b", dialect="spark"
     )
     assert not _select_has_star_projection(no_star)
+
+
+# --- WI-03: one ordered-dedupe implementation, two deliberately distinct nesting probes ---
+
+def test_unique_ordered_dedupes_preserves_order_and_skips_falsy():
+    from scope_lineage.scope._shared import _unique_ordered
+
+    assert _unique_ordered(["b", "a", "b", "", None, "a", "c"]) == ["b", "a", "c"]
+
+
+def test_resolver_alias_for_unique_ordered_is_gone():
+    import scope_lineage.scope._shared as shared
+
+    assert not hasattr(shared, "_unique_ordered__resolver")
+
+
+def test_inside_nested_subquery_stops_at_subquery_boundary():
+    import sqlglot
+    from sqlglot import exp
+    from scope_lineage.scope.expression_refs import _inside_nested_subquery
+
+    parsed = sqlglot.parse_one("SELECT a, (SELECT b FROM u) FROM t", dialect="spark")
+    columns = {col.name: col for col in parsed.find_all(exp.Column)}
+    assert _inside_nested_subquery(parsed, columns["b"]) is True
+    assert _inside_nested_subquery(parsed, columns["a"]) is False
+
+
+def test_inside_nested_set_op_takes_root_first_and_guards_root_identity():
+    import sqlglot
+    from sqlglot import exp
+    from scope_lineage.scope._shared import _inside_nested_set_op
+
+    parsed = sqlglot.parse_one("SELECT a FROM t UNION ALL SELECT b FROM u", dialect="spark")
+    columns = {col.name: col for col in parsed.find_all(exp.Column)}
+    # Columns live inside each branch's SELECT, which is nested relative to the UNION root.
+    assert _inside_nested_set_op(parsed, columns["a"]) is True
+    # The root itself is never "inside" the root.
+    assert _inside_nested_set_op(parsed, parsed) is False

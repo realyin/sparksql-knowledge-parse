@@ -23,7 +23,7 @@ from .scope_types import (
     ScopeLineageResult,
     DiagnosticWarning,
 )
-from ._shared import _pivot_of_source_node, _pivot_output_names, _classify_extended, _constant_sources, _inside_nested_query, _selected_sources, _source_free_leaf_sources, _source_item_from_ast_node, _source_ref_binding_key, _unique_ordered__resolver as _unique_ordered, DIALECT, _KNOWN_UDAFS, _SCOPE_ID_ATTR
+from ._shared import _pivot_of_source_node, _pivot_output_names, _classify_extended, _constant_sources, _inside_nested_set_op, _selected_sources, _source_free_leaf_sources, _source_item_from_ast_node, _source_ref_binding_key, _unique_ordered, DIALECT, _KNOWN_UDAFS, _SCOPE_ID_ATTR
 from .column_ref_resolver import (
     _bound_source_ref,
     _input_ref_id_for_source_alias,
@@ -684,7 +684,7 @@ def _scope_local_column_refs(sg_scope: Scope) -> list[exp.Column]:
     refs: list[exp.Column] = []
     for root in roots:
         for col_ref in root.find_all(exp.Column):
-            if not _inside_nested_query(col_ref, root):
+            if not _inside_nested_set_op(root, col_ref):
                 refs.append(col_ref)
     return refs
 

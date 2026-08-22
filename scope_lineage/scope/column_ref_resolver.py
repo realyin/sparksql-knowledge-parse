@@ -33,7 +33,7 @@ from ._shared import (
     _find_alias_in_parent,
     _ORIGINALLY_UNQUALIFIED_META,
     _SCOPE_ID_ATTR,
-    _inside_nested_query,
+    _inside_nested_set_op,
     _selected_sources,
     _source_item_from_ast_node,
     _source_ref_binding_key,
@@ -51,7 +51,7 @@ def _resolve_column_refs_in_expr(expr: exp.Expression, sg_scope: Scope, result: 
     sources: list = []
     for col_ref in expr.find_all(exp.Column):
         scope_for_ref = sg_scope
-        if _inside_nested_query(col_ref, expr):
+        if _inside_nested_set_op(expr, col_ref):
             # The reference belongs to a nested query, so it must be resolved against that
             # query's own sources -- resolving it here would bind it to whatever the outer
             # scope happens to expose under the same alias (MERGE-ALIAS-001). Skipping it

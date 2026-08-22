@@ -40,7 +40,7 @@ from .select_scope import _star_modifiers
 from .scope_warnings import detect_warnings
 from .scope_role_inferrer import infer_roles
 from .sqlglot_config import suppress_invalid_json_path_warnings
-from ._shared import DIALECT, PARSE_OPTS, render_sql_or_none, _ORIGINALLY_UNQUALIFIED_META, _SCOPE_ID_ATTR, _column_is_inside_nested_query, _find_alias_in_parent, _unique_ordered
+from ._shared import DIALECT, PARSE_OPTS, render_sql_or_none, _ORIGINALLY_UNQUALIFIED_META, _SCOPE_ID_ATTR, _inside_nested_subquery, _find_alias_in_parent, _unique_ordered
 # Re-exported only for the private integration repository, whose tests reach these through
 # this module instead of through ._shared. Nothing in this module uses them.
 from ._shared import _source_item_from_ast_node
@@ -1126,7 +1126,7 @@ def _build_result_from_scope(
                 # UNKNOWN or bind to the scalar query's local table.
                 has_correlated_target_ref = any(
                     column.table == target_alias
-                    and not _column_is_inside_nested_query(scope.expression, column)
+                    and not _inside_nested_subquery(scope.expression, column)
                     for column in scope.expression.find_all(exp.Column)
                 )
                 if (
