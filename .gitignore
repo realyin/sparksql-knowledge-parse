@@ -11,8 +11,8 @@ dist/
 *.env
 credentials*
 
-# Local AI assistant configuration
-CLAUDE.md
+# Local AI assistant state (CLAUDE.md itself is tracked: it carries the repo's
+# engineering rules, not personal configuration)
 .claude/
 .codex/
 
