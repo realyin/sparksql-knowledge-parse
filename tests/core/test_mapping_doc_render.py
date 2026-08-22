@@ -641,7 +641,7 @@ def test_cli_render_writes_warnings_doc_for_warning_bearing_tasks(tmp_path: Path
     assert "star_not_expanded" in warnings_doc
 
 
-def test_cli_render_directory_recurses_and_skips_v2(tmp_path: Path, capsys) -> None:
+def test_cli_render_directory_recurses_and_skips_unknown_documents(tmp_path: Path, capsys) -> None:
     from scope_lineage.cli import main
 
     corpus = tmp_path / "corpus"
@@ -650,16 +650,17 @@ def test_cli_render_directory_recurses_and_skips_v2(tmp_path: Path, capsys) -> N
         corpus / "nested" / "task_a",
         schema={"ods.users": ["id"]},
     )
-    v2_dir = corpus / "task_v2"
-    v2_dir.mkdir(parents=True)
-    (v2_dir / "lineage.json").write_text(
+    # A 2.0 file without artifact_kind is not a task document -- unknown, skipped.
+    unknown_dir = corpus / "task_unknown"
+    unknown_dir.mkdir(parents=True)
+    (unknown_dir / "lineage.json").write_text(
         json.dumps({"schema_version": "2.0"}), encoding="utf-8"
     )
 
     assert main(["render", "--lineage", str(corpus)]) == 0
     assert (corpus / "nested" / "task_a" / "mapping.md").exists()
-    assert not (v2_dir / "mapping.md").exists()
-    assert "skipped_v2=1" in capsys.readouterr().out
+    assert not (unknown_dir / "mapping.md").exists()
+    assert "skipped_unknown_version=1" in capsys.readouterr().out
 
 
 def test_cli_render_out_mirrors_input_tree(tmp_path: Path) -> None:
@@ -677,13 +678,13 @@ def test_cli_render_out_mirrors_input_tree(tmp_path: Path) -> None:
     assert not (corpus / "nested" / "task_a" / "mapping.md").exists()
 
 
-def test_cli_render_rejects_v2_single_file(tmp_path: Path, capsys) -> None:
+def test_cli_render_rejects_unknown_schema_versions(tmp_path: Path, capsys) -> None:
     from scope_lineage.cli import main
 
-    v2 = tmp_path / "lineage.json"
-    v2.write_text(json.dumps({"schema_version": "2.0"}), encoding="utf-8")
-    assert main(["render", "--lineage", str(v2)]) == 1
-    assert "2.0" in capsys.readouterr().err
+    unknown = tmp_path / "lineage.json"
+    unknown.write_text(json.dumps({"schema_version": "3.0"}), encoding="utf-8")
+    assert main(["render", "--lineage", str(unknown)]) == 1
+    assert "3.0" in capsys.readouterr().err
 
 
 def test_cli_render_field_and_sections_options(tmp_path: Path) -> None:
@@ -718,3 +719,21 @@ def test_expanded_flag_adds_expanded_expression_lines() -> None:
     expanded = render_mapping_markdown(document, expanded=True)
     assert "展开表达式：" not in plain
     assert "展开表达式：" in expanded
+
+
+def test_render_cli_renders_task_documents(tmp_path):
+    """The parse default emits task documents; the render subcommand must render them
+    (it silently skipped every non-1.0 file, which after the v1 retirement meant it
+    rendered nothing at all -- caught by local end-to-end verification)."""
+    from scope_lineage.cli import main
+
+    sql_path = tmp_path / "demo.sql"
+    sql_path.write_text("INSERT INTO mart.t SELECT id FROM ods.source", encoding="utf-8")
+    out = tmp_path / "artifacts"
+    assert main(["parse", "--sql-file", str(sql_path), "--out", str(out)]) == 0
+
+    assert main(["render", "--lineage", str(out)]) == 0
+    mapping = out / "demo" / "mapping.md"
+    assert mapping.is_file(), "render skipped the task document"
+    text = mapping.read_text(encoding="utf-8")
+    assert "stmt:" in text and "ods.source" in text

@@ -180,6 +180,7 @@ def main(argv: list[str] | None = None) -> int:
 def _render_inputs(args: argparse.Namespace) -> int:
     from .render.mapping_markdown import (
         SUPPORTED_SCHEMA_VERSION,
+        TASK_SCHEMA_VERSION,
         render_mapping_markdown,
         render_warnings_markdown,
     )
@@ -200,20 +201,26 @@ def _render_inputs(args: argparse.Namespace) -> int:
 
     sections = args.sections.split(",") if args.sections else None
     rendered = 0
-    skipped_v2 = 0
+    skipped_unknown_version = 0
     missing_diagnostics = 0
     for lineage_path in documents:
         document = json.loads(lineage_path.read_text(encoding="utf-8"))
-        if document.get("schema_version") != SUPPORTED_SCHEMA_VERSION:
+        version = document.get("schema_version")
+        renderable = version == SUPPORTED_SCHEMA_VERSION or (
+            version == TASK_SCHEMA_VERSION
+            and document.get("artifact_kind") == "task_lineage"
+        )
+        if not renderable:
             if root.is_file():
                 print(
                     "mapping renderer supports schema_version "
-                    f"{SUPPORTED_SCHEMA_VERSION}; {lineage_path} declares "
-                    f"{document.get('schema_version')!r}",
+                    f"{SUPPORTED_SCHEMA_VERSION} statement documents and "
+                    f"{TASK_SCHEMA_VERSION} task documents; {lineage_path} declares "
+                    f"{version!r}",
                     file=sys.stderr,
                 )
                 return 1
-            skipped_v2 += 1
+            skipped_unknown_version += 1
             continue
         diagnostics_path = lineage_path.parent / "diagnostics.json"
         diagnostics = None
@@ -245,7 +252,8 @@ def _render_inputs(args: argparse.Namespace) -> int:
 
     print(
         f"Rendered {rendered} mapping document(s) "
-        f"(skipped_v2={skipped_v2}, missing_diagnostics={missing_diagnostics})"
+        f"(skipped_unknown_version={skipped_unknown_version}, "
+        f"missing_diagnostics={missing_diagnostics})"
     )
     return 0
 
